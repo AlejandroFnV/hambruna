@@ -381,6 +381,7 @@ let pAcc=0,stepAcc=0,mouseX=0,mouseY=0,freshUiT=2;
 let inCave=false,caveMade=false,otherWorld=null,caveStore=null,caveReturn=null;
 let projs=[],fadeIn=0,openPot=null,birdT=3;
 let stats={kills:0,crafted:0,cooked:0};
+let tideOn=false,devourerDone=false;
 let banner={t:0,text:''};
 // logros
 const ACHS=[
@@ -396,6 +397,7 @@ const ACHS=[
   {id:'dia10',name:'Veterano',desc:'llega al día 10'},
   {id:'granjero',name:'Cosecha propia',desc:'recoge un cultivo del huerto'},
   {id:'escapista',name:'El Escapista',desc:'cruza el Portal Umbrío'},
+  {id:'leyenda',name:'Leyenda',desc:'acaba con el Devorador'},
 ];
 let achUn={};
 function ach(id){
@@ -448,6 +450,7 @@ const ITEMS={
   reed:{name:'junco',tip:'del pantano; trenza cuerda barata'},
   horn:{name:'cuerno del Astado',tip:'trofeo del terror del invierno'},
   crown:{name:'corona de seda',tip:'trofeo de la Reina de la cueva'},
+  darkheart:{name:'corazón umbrío',tip:'clic dcho: bendición — regeneras vida para siempre'},
   armor_wood:{name:'armadura de madera',passive:true,armor:0.6,adur:80,tip:'absorbe 60% del daño en el inventario'},
   armor_gold:{name:'armadura de oro',passive:true,armor:0.75,adur:150,tip:'absorbe 75% del daño en el inventario'},
   estofado:{name:'estofado de carne',food:{h:55,hp:6,s:5},tip:'de la olla'},
@@ -531,6 +534,7 @@ const MOBDEF={
   bison:{hp:120,sp:95,dmg:20,rng:50,agro:0,cd:1.6},
   pet:{hp:40,sp:145,dmg:0,rng:0,agro:0,cd:9},
   frog:{hp:12,sp:95,dmg:6,rng:30,agro:140,cd:1.4},
+  devourer:{hp:400,sp:85,dmg:32,rng:64,agro:9999,cd:1.8},
 };
 const MOB_TIP={spider:['Araña','peligrosa; suelta carne y seda'],wolf:['Lobo','suelta pelaje'],
   rabbit:['Conejo','se caza con clic o trampa'],shadow:['Sombra','fruto de tu locura'],
@@ -540,7 +544,8 @@ const MOB_TIP={spider:['Araña','peligrosa; suelta carne y seda'],wolf:['Lobo','
   queen:['Reina de la Seda','guarda el oro de la cueva'],
   bison:['Bisonte','pacífico si tú lo eres; deja estiércol'],
   pet:['Tu lobito','recoge cosas del suelo por ti'],
-  frog:['Rana toro','territorial; suelta carne']};
+  frog:['Rana toro','territorial; suelta carne'],
+  devourer:['El Devorador','cruzó el portal detrás de ti']};
 const GATE={
   tree:[0,0.15,1,0.25,0.15], rock:[0,0.05,0.2,1,0], bush:[0,1,0.5,0,0], grass:[0,1,0.25,0.1,0.3],
   sapling:[0,0.5,1,0.15,0.2], flint:[0,0.1,0.15,1,0], carrot:[0,1,0.1,0,0], hive:[0,1,0.3,0,0],
@@ -796,6 +801,11 @@ function useItem(arr,i){
       s.n--; if(!s.n)arr[i]=null; renderInv(); return }
     if(plantAt(s.id)){ s.n--; if(!s.n)arr[i]=null; renderInv() } return }
   if(s.id==='pinecone'){ if(plantAt(s.id)){ s.n--; if(!s.n)arr[i]=null; renderInv() } return }
+  if(s.id==='darkheart'){
+    player.blessed=true; player.hp=100; sfx('coldsting');
+    burstP(player.x,player.y-40,16,'#8a5aa8',90);
+    msg('El corazón umbrío late contigo: regenerarás vida para siempre');
+    s.n--; if(!s.n)arr[i]=null; renderInv(); return }
   if(s.id==='venda'){ if(player.hp>=100)return msg('Estás intacto');
     player.hp=clamp(player.hp+20,0,100); sfx('eat'); float(player.x,player.y-70,'+20 vida','#8fdd8a');
     s.n--; if(!s.n)arr[i]=null; renderInv(); return }
@@ -1169,7 +1179,9 @@ function useEnt(e){
       else if(e.crop)msg('Está creciendo... ('+Math.round(e.crop.t/e.crop.max*100)+'%)');
       else msg('Huerto vacío: planta semillas con clic derecho'); break;
     case 'den': if(e.state!=='ok')return; startAct('smash',e,0.6); break;
-    case 'portal': winGame(); break;
+    case 'portal':
+      if(tideOn&&!devourerDone)return msg('El portal duerme. Acaba antes con lo que dejó pasar.');
+      winGame(); break;
     case 'bundle': if(e.state!=='ok')return; startAct('pick',e,0.5); break;
     case 'totem': msg(e.state==='ok'?'Tótem de retorno: te revivirá una vez':'Este tótem ya se gastó'); break;
     case 'ruinchest': if(e.state!=='ok')return; startAct('pick',e,0.9); break;
@@ -1219,6 +1231,9 @@ function damageMob(m,dmg){
     case 'boss': dropAt(m.x,m.y,'meat',4); dropAt(m.x,m.y,'fur',2); dropAt(m.x,m.y,'horn',1);
       bossDone=true; msg('El Astado ha caído. Su cuerno es tuyo.'); shake=0.6; ach('jefe'); break;
     case 'shadow': player.san=clamp(player.san+12,0,100); float(m.x,m.y-44,'+cordura','#9fd7ff'); break;
+    case 'devourer': dropAt(m.x,m.y,'darkheart',1);
+      devourerDone=true; tideOn=false; ach('leyenda');
+      msg('El Devorador se deshace en jirones. La Marea Umbría se retira.'); shake=0.8; break;
   }
   mobs.splice(mobs.indexOf(m),1); }
 function hitMob(m){
@@ -1227,7 +1242,7 @@ function hitMob(m){
   player.swing=0.25; player.act=null;
   if(eq&&dmg>6)useTool();
   const a=Math.atan2(m.y-player.y,m.x-player.x);
-  const kb=(m.type==='boss'||m.type==='treeguard'||m.type==='queen')?8:26;
+  const kb=(m.type==='boss'||m.type==='treeguard'||m.type==='queen'||m.type==='devourer')?8:26;
   m.x=clamp(m.x+Math.cos(a)*kb,40,WS()-40); m.y=clamp(m.y+Math.sin(a)*kb,40,WS()-40);
   sfx('chop'); damageMob(m,dmg) }
 function throwDart(m){
@@ -1448,13 +1463,15 @@ function spawnNightMobs(){
   if(seasonIdx(day)===1&&!bossDone&&!mobs.some(m=>m.type==='boss')&&(day-1)%SEASON_DAYS===1){
     const a=Math.random()*6.28;
     spawnMob('boss',player.x+Math.cos(a)*500,player.y+Math.sin(a)*500);
-    msg('Un bramido sacude el bosque...'); sfx('roar'); shake=0.7 } }
+    msg('Un bramido sacude el bosque...'); sfx('roar'); shake=0.7 }
+  if(tideOn&&!devourerDone)for(let i=0;i<2;i++){ const a=Math.random()*6.28;
+    spawnMob('shadow',player.x+Math.cos(a)*420,player.y+Math.sin(a)*420) } }
 
 // ---------- guardado ----------
 function store(){ try{ const s=window.localStorage; s.getItem('x'); return s }catch(e){ return null } }
 function save(){ const s=store(); if(!s||dead)return;
   try{ s.setItem('hambruna',JSON.stringify({v:6,day,time,temp,scienceBuilt,bossDone,prevSeason,worldSeed,
-    inCave,caveMade,caveReturn,stats,difficulty,ach:achUn,
+    inCave,caveMade,caveReturn,stats,difficulty,ach:achUn,tideOn,devourerDone,
     player,slots,held,equipped:slots.indexOf(equippedRef),
     active:packWorld(), other:inCave?otherWorld:caveStore})) }catch(e){} }
 function loadSave(){ const s=store(); if(!s)return null;
@@ -1465,6 +1482,7 @@ function applySave(d){
   prevSeason=d.prevSeason; worldSeed=d.worldSeed;
   inCave=d.inCave; caveMade=d.caveMade; caveReturn=d.caveReturn; stats=d.stats||{kills:0,crafted:0,cooked:0};
   difficulty=d.difficulty||'normal'; achUn=d.ach||{};
+  tideOn=!!d.tideOn; devourerDone=!!d.devourerDone;
   Object.assign(player,d.player); player.act=null; slots=d.slots; held=d.held||null;
   equippedRef=d.equipped>=0?slots[d.equipped]:null;
   loadWorld(d.active);
@@ -1536,6 +1554,7 @@ function tick(dt){
     return true });
 
   const lit=isLit();
+  if(player.blessed&&player.hp<100)player.hp=Math.min(100,player.hp+0.3*dt);
   player.hun=Math.max(0,player.hun-0.34*D().hunger*dt);
   if(player.hun<=0){ player.hp-=2*dt; killer='el hambre' }
   let ds;
@@ -1614,6 +1633,10 @@ function tick(dt){
     if(day===7)ach('invierno');
     const si=seasonIdx(day);
     if(si!==prevSeason){ prevSeason=si; msg(SEASON_MSG[si]) }
+    if(!inCave&&tideOn&&!devourerDone&&!mobs.some(m=>m.type==='devourer')){
+      const a=Math.random()*6.28;
+      spawnMob('devourer',player.x+Math.cos(a)*550,player.y+Math.sin(a)*550);
+      msg('El Devorador te ha encontrado.'); sfx('roar'); shake=0.8 }
     if(!inCave){
       mobs.forEach(m=>{ if(m.type==='spider'||m.type==='wolf')m.flee=true });
       let rb=mobs.filter(m=>m.type==='rabbit').length;
@@ -1704,7 +1727,7 @@ function tick(dt){
     if(!inCave&&m.type!=='bird'&&m.type!=='bat'&&sp>0&&biomeAt(m.x,m.y)===B_SWAMP)sp*=0.7;
     const mnx=clamp(m.x+Math.cos(ang)*sp*dt,40,WS()-40), mny=clamp(m.y+Math.sin(ang)*sp*dt,40,WS()-40);
     let wallBlock=false;
-    if(m.type!=='pet'&&m.type!=='bird')for(const w of walls){
+    if(m.type!=='pet'&&m.type!=='bird'&&m.type!=='devourer')for(const w of walls){
       if(Math.abs(w.x-mnx)<30&&Math.abs(w.y-4-mny)<30){ wallBlock=true; break } }
     if(wallBlock){ m.wa=Math.random()*6.28 }
     else if(!blockedAt(mnx,mny)){ if(Math.abs(mnx-m.x)>0.01)m.dirX=mnx>m.x?1:-1; m.x=mnx; m.y=mny }
@@ -1721,6 +1744,16 @@ function tick(dt){
       sfx('hurt'); float(player.x,player.y-70,'-'+def.dmg,'#ff6b5e') }
     if(m.type==='boss'||m.type==='treeguard'){ m.stepT=(m.stepT||0)-dt;
       if(m.stepT<=0){ m.stepT=0.85; if(dp<700){ shake=Math.max(shake,0.22*(1-dp/700)); sfx('thud') } } }
+    if(m.type==='devourer'){ m.blinkCd=(m.blinkCd||6)-dt;
+      if(m.blinkCd<=0&&dp>210){ m.blinkCd=6;
+        burstP(m.x,m.y-20,12,'#4a3a5a',80);
+        const ba=Math.random()*6.28;
+        m.x=clamp(player.x+Math.cos(ba)*150,40,WS()-40);
+        m.y=clamp(player.y+Math.sin(ba)*150,40,WS()-40);
+        burstP(m.x,m.y-20,12,'#4a3a5a',80); sfx('grue');
+        float(m.x,m.y-60,'parpadeo','#cfd6ff') }
+      m.stepT=(m.stepT||0)-dt;
+      if(m.stepT<=0){ m.stepT=0.8; if(dp<700){ shake=Math.max(shake,0.25*(1-dp/700)); sfx('thud') } } }
     if(m.type==='queen'){ m.spawnCd=(m.spawnCd||5)-dt;
       if(dp<420&&m.spawnCd<=0&&mobs.filter(x=>x.type==='spider').length<8){
         m.spawnCd=9; float(m.x,m.y-70,'¡crías!','#cfd6ff');
@@ -1883,7 +1916,10 @@ function winGame(){
   ach('escapista');
   throwConfetti(o); sfx('craft');
   $('againBtn').onclick=()=>{ clearSave(); location.reload() };
-  $('stayBtn').onclick=()=>{ o.style.display='none'; paused=false };
+  $('stayBtn').onclick=()=>{ o.style.display='none'; paused=false;
+    if(!devourerDone&&!tideOn){ tideOn=true;
+      msg('El Portal se cierra tras de ti... y algo lo cruzó en dirección contraria.');
+      msg('La Marea Umbría comienza: sobrevive hasta el alba.') } };
 }
 
 // ---------- dibujo ----------
@@ -2032,6 +2068,11 @@ function drawItemIcon(g,id,cx,cy,s){
       g.strokeStyle='#4f7a2c'; g.lineWidth=2.2;
       g.beginPath(); g.moveTo(-3,6); g.quadraticCurveTo(-8,2,-7,-4); g.stroke();
       if(id==='corn_c')steam(g); break;
+    case 'darkheart': g.fillStyle='#4a3060';
+      g.beginPath(); g.moveTo(0,9);
+      g.bezierCurveTo(-10,1,-8,-8,-1,-5); g.bezierCurveTo(0,-7,1,-7,2,-5);
+      g.bezierCurveTo(9,-8,10,1,0,9); g.fill(); g.stroke();
+      g.fillStyle='#8a5aa8'; g.beginPath(); g.arc(-1,-1,2.2,0,7); g.fill(); break;
     case 'horn': g.strokeStyle='#d8d3c4'; g.lineWidth=4;
       g.beginPath(); g.moveTo(-7,9); g.quadraticCurveTo(-2,-4,8,-9); g.stroke();
       g.strokeStyle=INK; g.lineWidth=1.8;
@@ -2593,6 +2634,23 @@ function drawBison(m){
   ctx.beginPath(); ctx.arc(18,-18,1.6,0,7); ctx.fill();
   ctx.fillStyle='#3a2c1c'; ctx.beginPath(); ctx.ellipse(21,-12,3.6,2.6,0.2,0,7); ctx.fill(); ctx.stroke();
   ctx.restore() }
+function drawDevourer(m){
+  shadowE(m.x,m.y+2,34);
+  ctx.save(); ctx.globalAlpha=0.92;
+  ctx.fillStyle=m.hurt>0?'#3a2a44':'#161221';
+  wobPath(m.x,m.y-34,30,m.seed+time*1.6,10,.22); ctx.fill();
+  wobPath(m.x,m.y-58,18,m.seed+3+time*2.1,9,.26); ctx.fill();
+  ctx.strokeStyle='#161221'; ctx.lineWidth=4;
+  for(let i=-2;i<=2;i++){ ctx.beginPath(); ctx.moveTo(m.x+i*11,m.y-14);
+    ctx.quadraticCurveTo(m.x+i*15,m.y+4+Math.sin(time*5+i)*4,m.x+i*9,m.y+12); ctx.stroke() }
+  ctx.fillStyle='#cfd6ff';
+  for(let i=0;i<6;i++){ const a=m.seed+i*1.9, pu=0.5+0.5*Math.sin(time*3+i*2);
+    ctx.globalAlpha=0.5+0.5*pu;
+    ctx.beginPath(); ctx.arc(m.x+Math.cos(a)*14,m.y-40+Math.sin(a)*16,2+((i*3)%3),0,7); ctx.fill() }
+  ctx.globalAlpha=0.92;
+  ctx.strokeStyle='#8a5aa8'; ctx.lineWidth=2;
+  ctx.beginPath(); ctx.arc(m.x,m.y-40,34+Math.sin(time*2.4)*4,0,7); ctx.stroke();
+  ctx.restore() }
 function drawQueen(m){
   shadowE(m.x,m.y+2,32);
   ctx.strokeStyle=INK; ctx.lineWidth=3; ctx.lineCap='round';
@@ -2902,11 +2960,12 @@ function draw(){
        m.type==='boss'?drawBoss:m.type==='bird'?drawBird:m.type==='bee'?drawBee:
        m.type==='bat'?drawBat:m.type==='treeguard'?drawTreeguard:
        m.type==='queen'?drawQueen:m.type==='bison'?drawBison:
-       m.type==='pet'?drawPet:m.type==='frog'?drawFrog:drawSpider)(m);
+       m.type==='pet'?drawPet:m.type==='frog'?drawFrog:
+       m.type==='devourer'?drawDevourer:drawSpider)(m);
       if(m.hurtShow>0&&m.hp>0){
-        const big=m.type==='boss'||m.type==='queen'||m.type==='treeguard';
+        const big=m.type==='boss'||m.type==='queen'||m.type==='treeguard'||m.type==='devourer';
         const w=big?44:26;
-        const hh=m.type==='boss'?-100:m.type==='treeguard'?-118:m.type==='queen'?-56:-40;
+        const hh=m.type==='boss'?-100:m.type==='treeguard'?-118:m.type==='queen'?-56:m.type==='devourer'?-88:-40;
         ctx.globalAlpha=clamp(m.hurtShow,0,1);
         ctx.fillStyle='rgba(0,0,0,.55)'; ctx.fillRect(m.x-w/2,m.y+hh,w,4.5);
         ctx.fillStyle='#c34532';
@@ -3145,6 +3204,9 @@ window.HAM={
   setTemp:t=>{ temp=t },
   achs:()=>Object.keys(achUn),
   age:s=>tickFresh(s),
+  tide:()=>({tideOn,devourerDone,blessed:!!player.blessed}),
+  startTide:()=>{ tideOn=true },
+  killType:t=>{ const m=mobs.find(m=>m.type===t); if(m)damageMob(m,99999); return !!m },
   freshOf:id=>{ const sl=slots.find(x=>x&&x.id===id); return sl?Math.round(sl.fresh??-1):null },
   dropTest:(id,n,dx)=>dropAt(player.x+(dx||100),player.y,id,n||1),
   adopt:()=>{ const e=ents.find(e=>e.type==='pup'&&e.state==='ok'); if(e)useEnt(e); return !!e },
