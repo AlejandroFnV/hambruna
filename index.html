@@ -381,6 +381,11 @@ const ITEMS={
   meat_c:{name:'carne asada',food:{h:25,hp:3,s:4},tip:'clic dcho: comer'},
   axe:{name:'hacha',tool:true,dur:40,tip:'clic dcho: equipar'},
   pickaxe:{name:'pico',tool:true,dur:40,tip:'clic dcho: equipar'},
+  axe_gold:{name:'hacha dorada',tool:true,dur:100,tip:'más daño y dura 2.5×'},
+  pick_gold:{name:'pico dorado',tool:true,dur:100,tip:'pica más fuerte y dura 2.5×'},
+  fishrod:{name:'caña de pescar',tool:true,dur:20,tip:'equípala y clic en el agua'},
+  fish:{name:'pescado',food:{h:14,hp:0,s:0},tip:'mejor asado; cuenta como carne en la olla'},
+  fish_c:{name:'pescado asado',food:{h:22,hp:2,s:2},tip:'clic dcho: comer'},
   torch:{name:'antorcha',tool:true,dur:75,tip:'clic dcho: equipar (luz)'},
   spear:{name:'lanza',tool:true,dur:50,tip:'clic dcho: equipar (daño 25)'},
   coat:{name:'abrigo',passive:true,tip:'abriga con llevarlo encima'},
@@ -400,6 +405,9 @@ const RECIPES=[
   {out:'campfire',name:'Fogata',cost:{wood:2,grass:3},place:'fire'},
   {out:'science',name:'Máquina de Ciencia',cost:{wood:4,stone:4,flint:2},place:'science'},
   {out:'spear',name:'Lanza',cost:{twig:2,flint:2,stone:1},sci:true},
+  {out:'fishrod',name:'Caña de pescar',cost:{twig:2,silk:2},sci:true},
+  {out:'axe_gold',name:'Hacha dorada',cost:{gold:2,twig:1,flint:1},sci:true},
+  {out:'pick_gold',name:'Pico dorado',cost:{gold:2,twig:2,flint:1},sci:true},
   {out:'dart',name:'Dardos ×2',cost:{feather:2,twig:1,flint:1},sci:true,n:2},
   {out:'backpack',name:'Mochila (+4 huecos)',cost:{grass:4,twig:4,rope:1},sci:true,special:'backpack'},
   {out:'coat',name:'Abrigo de pelaje',cost:{fur:4,twig:2},sci:true},
@@ -713,7 +721,7 @@ function renderChest(){ if(!openChest)return;
 // olla de cocina
 function potRecipe(ids){
   const c=k=>ids.filter(i=>k.includes(i)).length;
-  const meat=c(['meat','meat_c']), egg=c(['egg']), honey=c(['honey']),
+  const meat=c(['meat','meat_c','fish','fish_c']), egg=c(['egg']), honey=c(['honey']),
     berry=c(['berries','berries_c']), mush=c(['mushroom']),
     pump=c(['pumpkin','pumpkin_c']),
     veg=c(['carrot','carrot_c','pumpkin','pumpkin_c','corn','corn_c']);
@@ -872,7 +880,7 @@ function burstP(x,y,n,color,speed,star){
 
 // ---------- sistema de acciones ----------
 function startAct(kind,target,dur){ player.act={kind,target,t:0,dur} }
-const RAW_COOK={berries:1,meat:1,carrot:1,pumpkin:1,corn:1};
+const RAW_COOK={berries:1,meat:1,carrot:1,pumpkin:1,corn:1,fish:1};
 function startCook(f,src,id){ player.face=f.x>player.x?1:-1;
   player.act={kind:'cook',target:f,t:0,dur:1.1,src,itemId:id} }
 function actLoot(e){
@@ -899,6 +907,17 @@ function actLoot(e){
 function tickAct(dt){
   const a=player.act; if(!a)return;
   const e=a.target;
+  if(a.kind==='fish'){
+    if(!equippedRef||equippedRef.id!=='fishrod'){ player.act=null; return }
+    a.t+=dt;
+    if(Math.random()<dt*2)spawnP({x:a.spot.x+Math.random()*10-5,y:a.spot.y,vx:0,vy:-4,g:0,
+      t:0.6,max:0.6,r:1.8,color:'rgba(240,248,255,0.6)'});
+    if(a.t<a.dur)return;
+    useTool();
+    if(Math.random()<0.75){ burstP(a.spot.x,a.spot.y,8,'rgba(190,220,240,0.9)',70);
+      lootFly(a.spot.x,a.spot.y-8,'fish',1); sfx('pop') }
+    else { float(a.spot.x,a.spot.y-14,'se escapó...','#aac8dc') }
+    player.act=null; return }
   if(a.kind==='cook'){
     if(!e||e.fuel<=0||dist(e,player)>REACH+30){ player.act=null; return }
     if(Math.random()<dt*7)spawnP({x:e.x+Math.random()*10-5,y:e.y-18,vx:Math.random()*8-4,
@@ -918,7 +937,7 @@ function tickAct(dt){
   else if(a.kind==='chop'){
     player.swing=0.28; e.hp--; useTool(); e.shake=0.25; sfx('chop');
     burstP(e.x,e.y-34,6,'#c99b62',70);
-    if(e.hp<=0||!equippedRef||equippedRef.id!=='axe'){
+    if(e.hp<=0||!equippedRef||(equippedRef.id!=='axe'&&equippedRef.id!=='axe_gold')){
       if(e.hp<=0){ e.state='falling'; e.fallT=0.8; e.fallDir=player.x<e.x?1:-1 }
       player.act=null } }
   else if(a.kind==='smash'){
@@ -933,7 +952,7 @@ function tickAct(dt){
   else if(a.kind==='mine'){
     player.swing=0.28; e.hp--; useTool(); e.shake=0.25; sfx('pick');
     burstP(e.x,e.y-14,6,'#b5b0a4',70);
-    if(e.hp<=0||!equippedRef||equippedRef.id!=='pickaxe'){
+    if(e.hp<=0||!equippedRef||(equippedRef.id!=='pickaxe'&&equippedRef.id!=='pick_gold')){
       if(e.hp<=0){ e.state='gone'; burstP(e.x,e.y-10,12,'#8b867a',90); sfx('thud');
         if(e.type==='goldnode'){ lootFly(e.x,e.y-10,'gold',2); lootFly(e.x,e.y-4,'stone',1) }
         else { lootFly(e.x,e.y-10,'stone',2); lootFly(e.x,e.y-4,'flint',1) } }
@@ -950,12 +969,12 @@ function useEnt(e){
   switch(e.type){
     case 'tree':
       if(e.state!=='ok')return;
-      if(!equippedRef||equippedRef.id!=='axe')return msg('Necesitas un hacha para talar');
-      startAct('chop',e,0.55); break;
+      if(!equippedRef||(equippedRef.id!=='axe'&&equippedRef.id!=='axe_gold'))return msg('Necesitas un hacha para talar');
+      startAct('chop',e,equippedRef.id==='axe_gold'?0.42:0.55); break;
     case 'rock':
       if(e.state!=='ok')return;
-      if(!equippedRef||equippedRef.id!=='pickaxe')return msg('Necesitas un pico para picar');
-      startAct('mine',e,0.55); break;
+      if(!equippedRef||(equippedRef.id!=='pickaxe'&&equippedRef.id!=='pick_gold'))return msg('Necesitas un pico para picar');
+      startAct('mine',e,equippedRef.id==='pick_gold'?0.42:0.55); break;
     case 'grass': case 'sapling': case 'bush': case 'carrot':
       if(e.state!=='ok')return; startAct('pick',e,0.75); break;
     case 'flint': if(e.state!=='ok')return; startAct('pick',e,0.35); break;
@@ -1035,9 +1054,9 @@ function damageMob(m,dmg){
   mobs.splice(mobs.indexOf(m),1); }
 function hitMob(m){
   const eq=equippedRef;
-  const dmg=eq?(eq.id==='spear'?25:eq.id==='axe'?15:eq.id==='pickaxe'?11:6):6;
+  const dmg=eq?({spear:25,axe:15,axe_gold:18,pickaxe:11,pick_gold:13}[eq.id]||6):6;
   player.swing=0.25; player.act=null;
-  if(eq&&(eq.id==='axe'||eq.id==='pickaxe'||eq.id==='spear'))useTool();
+  if(eq&&dmg>6)useTool();
   const a=Math.atan2(m.y-player.y,m.x-player.x);
   const kb=(m.type==='boss'||m.type==='treeguard'||m.type==='queen')?8:26;
   m.x=clamp(m.x+Math.cos(a)*kb,40,WS()-40); m.y=clamp(m.y+Math.sin(a)*kb,40,WS()-40);
@@ -1108,7 +1127,14 @@ cv.addEventListener('pointerdown',e=>{
     held=null; renderHeld(); sfx('pop'); return }
   player.face=wx>player.x?1:-1;
   const t=hoverTarget(wx,wy);
-  if(!t)return;
+  if(!t){ // ¿pescar? clic en agua con la caña equipada
+    if(!inCave&&equippedRef&&equippedRef.id==='fishrod'&&biomeAt(wx,wy)===B_WATER){
+      const d=Math.hypot(wx-player.x,wy-player.y);
+      if(d>160)return float(wx,wy-10,'demasiado lejos','#ccc');
+      player.face=wx>player.x?1:-1;
+      player.act={kind:'fish',spot:{x:wx,y:wy},t:0,dur:2.6+Math.random()*2.2};
+      sfx('pop') }
+    return }
   if(t.kind==='mob'&&t.o.type==='pet')return float(t.o.x,t.o.y-34,'¡guau!','#cfc6b8');
   if(t.kind==='ent'&&t.o.state!=='ok'&&t.o.state!=='full')return;
   const extra=(t.kind==='ent'&&t.o.type==='tree')?18:(t.kind==='mob'&&t.o.type==='boss')?20:0;
@@ -1491,6 +1517,12 @@ function tick(dt){
       else if(rainOn)spawnP({x,y,vx:-30,vy:540,g:0,t:4,max:4,r:1,color:'rgba(180,200,220,0.5)',rain:true});
       else spawnP({x,y,vx:8+Math.random()*12,vy:24,g:0,t:20,max:20,r:2.2,color:'#dda1b4',leaf:true,sway:Math.random()*6}) }
       acc2-- } }
+  // peces saltando en los lagos
+  if(!inCave&&Math.random()<dt*0.7){
+    const fx=cam.x+Math.random()*VW(), fy=cam.y+Math.random()*VH();
+    if(biomeAt(fx,fy)===B_WATER){
+      burstP(fx,fy,4,'rgba(190,220,240,0.8)',50);
+      spawnP({x:fx,y:fy-4,vx:0,vy:-46,g:160,t:0.7,max:0.7,r:2.6,color:'#8aa8b8'}) } }
   if(u>=0.62&&sIdx!==1&&!inCave){ while(flies.length<12)flies.push({x:cam.x+Math.random()*VW(),
     y:cam.y+Math.random()*VH(),seed:Math.random()*100}) }
   else flies.length=0;
@@ -1631,11 +1663,25 @@ function drawItemIcon(g,id,cx,cy,s){
       g.fillStyle='#ece2cc'; g.beginPath(); g.arc(8,8,2.6,0,7); g.fill();
       g.strokeStyle=INK; g.lineWidth=1.6; g.stroke();
       if(id==='meat_c')steam(g); break;
-    case 'axe': g.strokeStyle='#7a5230'; g.lineWidth=3.4; g.beginPath(); g.moveTo(-7,10); g.lineTo(5,-6); g.stroke();
-      g.fillStyle='#9a958a'; poly(g,[[3,-9],[11,-5],[6,1],[1,-4]]); g.fill();
+    case 'axe': case 'axe_gold': g.strokeStyle='#7a5230'; g.lineWidth=3.4;
+      g.beginPath(); g.moveTo(-7,10); g.lineTo(5,-6); g.stroke();
+      g.fillStyle=id==='axe_gold'?'#d8b34a':'#9a958a'; poly(g,[[3,-9],[11,-5],[6,1],[1,-4]]); g.fill();
       g.strokeStyle=INK; g.lineWidth=2.2; g.stroke(); break;
-    case 'pickaxe': g.strokeStyle='#7a5230'; g.lineWidth=3.4; g.beginPath(); g.moveTo(-6,10); g.lineTo(6,-6); g.stroke();
-      g.strokeStyle='#9a958a'; g.lineWidth=3.6; g.beginPath(); g.moveTo(-4,-10); g.quadraticCurveTo(6,-13,12,-3); g.stroke(); break;
+    case 'pickaxe': case 'pick_gold': g.strokeStyle='#7a5230'; g.lineWidth=3.4;
+      g.beginPath(); g.moveTo(-6,10); g.lineTo(6,-6); g.stroke();
+      g.strokeStyle=id==='pick_gold'?'#d8b34a':'#9a958a'; g.lineWidth=3.6;
+      g.beginPath(); g.moveTo(-4,-10); g.quadraticCurveTo(6,-13,12,-3); g.stroke(); break;
+    case 'fishrod': g.strokeStyle='#7a5230'; g.lineWidth=2.8;
+      g.beginPath(); g.moveTo(-9,10); g.quadraticCurveTo(2,-2,8,-10); g.stroke();
+      g.strokeStyle='rgba(240,246,252,0.9)'; g.lineWidth=1.2;
+      g.beginPath(); g.moveTo(8,-10); g.lineTo(8,4); g.stroke();
+      g.fillStyle='#c0452c'; g.beginPath(); g.arc(8,5.5,2.2,0,7); g.fill();
+      g.strokeStyle=INK; g.lineWidth=1.2; g.stroke(); break;
+    case 'fish': case 'fish_c': g.fillStyle=id==='fish'?'#8aa8b8':'#a8865a';
+      g.beginPath(); g.ellipse(-1,0,8,4.5,0,0,7); g.fill(); g.stroke();
+      poly(g,[[6,0],[11,-4],[11,4]]); g.fill(); g.stroke();
+      g.fillStyle=INK; g.beginPath(); g.arc(-5,-1,0.9,0,7); g.fill();
+      if(id==='fish_c')steam(g); break;
     case 'spear': g.strokeStyle='#7a5230'; g.lineWidth=3; g.beginPath(); g.moveTo(-9,11); g.lineTo(7,-7); g.stroke();
       g.fillStyle='#9a958a'; poly(g,[[5,-9],[11,-11],[9,-3]]); g.fill();
       g.strokeStyle=INK; g.lineWidth=1.8; g.stroke(); break;
@@ -2316,10 +2362,12 @@ function drawPlayer(){
   const craftSw=p.craftA>0?Math.sin(time*22)*0.9:0;
   const swingA=p.swing>0?-Math.sin(p.swing/0.28*Math.PI)*1.3:0;
   const cooking=p.act&&p.act.kind==='cook';
+  const fishing=p.act&&p.act.kind==='fish';
   const eating=p.eatA>0;
   const cookSw=cooking?Math.sin(time*6)*0.12:0;
   const eatSw=eating?(0.5+0.5*Math.sin(time*16))*0.55:0; // mano boca-plato
-  const armBase=eating?-1.15+eatSw:cooking?0.15+cookSw:(p.act&&p.act.kind==='pick')?1.15:0.55;
+  const armBase=eating?-1.15+eatSw:cooking?0.15+cookSw:fishing?-0.15+Math.sin(time*2)*0.05:
+    (p.act&&p.act.kind==='pick')?1.15:0.55;
   ctx.save(); ctx.translate(6,-30); ctx.rotate(armBase+(eating?0:st*0.25+swingA+craftSw));
   ctx.strokeStyle=coat?'#6e4f30':'#4a3b28'; ctx.lineWidth=4.5;
   ctx.beginPath(); ctx.moveTo(0,0); ctx.lineTo(cooking?15:11,7); ctx.stroke();
@@ -2358,6 +2406,16 @@ function drawPlayer(){
   else { ctx.strokeStyle=INK; ctx.lineWidth=1.8;
     ctx.beginPath(); ctx.moveTo(6,-46); ctx.quadraticCurveTo(8,-44.5,10,-46); ctx.stroke() }
   ctx.restore(); ctx.restore();
+  if(p.act&&p.act.kind==='fish'){ // sedal + flotador
+    const s2=p.act.spot, hx2=p.x+p.face*24, hy2=p.y-42;
+    const bob=Math.sin(time*3)*2.5;
+    ctx.strokeStyle='rgba(240,246,252,0.75)'; ctx.lineWidth=1.4;
+    ctx.beginPath(); ctx.moveTo(hx2,hy2);
+    ctx.quadraticCurveTo((hx2+s2.x)/2,Math.max(hy2,s2.y)+26,s2.x,s2.y+bob*0.4); ctx.stroke();
+    ctx.fillStyle='#c0452c'; ctx.strokeStyle=INK; ctx.lineWidth=1.6;
+    ctx.beginPath(); ctx.arc(s2.x,s2.y+bob*0.4,3.4,0,7); ctx.fill(); ctx.stroke();
+    ctx.strokeStyle='rgba(255,255,255,0.35)'; ctx.lineWidth=1.4;
+    ctx.beginPath(); ctx.arc(s2.x,s2.y,8+Math.sin(time*2.4)*3,0,7); ctx.stroke() }
   if(p.act){ const k=clamp(p.act.t/p.act.dur,0,1);
     ctx.fillStyle='rgba(0,0,0,.4)'; ctx.beginPath(); ctx.arc(p.x,p.y-84,10,0,7); ctx.fill();
     ctx.strokeStyle='#ffd76a'; ctx.lineWidth=3.5;
