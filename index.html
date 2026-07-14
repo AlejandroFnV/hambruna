@@ -252,7 +252,7 @@ const PAL=[
 const seasonIdx=d=>Math.floor((d-1)/SEASON_DAYS)%4;
 
 // ---------- biomas ----------
-const B_WATER=0,B_MEADOW=1,B_FOREST=2,B_ROCK=3;
+const B_WATER=0,B_MEADOW=1,B_FOREST=2,B_ROCK=3,B_SWAMP=4;
 let worldSeed=Math.random()*999;
 function hash2(i,j){ const h=Math.sin(i*127.1+j*311.7+worldSeed*13.77)*43758.5453; return h-Math.floor(h) }
 function vnoise(x,y){ const i=Math.floor(x),j=Math.floor(y),fx=x-i,fy=y-j;
@@ -263,10 +263,13 @@ function fieldAt(x,y){ return vnoise(x/560,y/560)*0.62+vnoise(x/210,y/210)*0.38 
 function biomeAt(x,y){
   if(Math.hypot(x-WORLD/2,y-WORLD/2)<300)return B_MEADOW;
   const n=fieldAt(x,y);
-  return n<0.30?B_WATER:n<0.50?B_MEADOW:n<0.68?B_FOREST:B_ROCK }
-const BIOME_G=[hx('#3f6b76'),hx('#83955c'),hx('#5f7a48'),hx('#8b8574')];
+  const base=n<0.30?B_WATER:n<0.50?B_MEADOW:n<0.68?B_FOREST:B_ROCK;
+  if(base!==B_WATER&&base!==B_ROCK&&Math.hypot(x-WORLD/2,y-WORLD/2)>800&&
+    vnoise((x+4000)/440,(y+4000)/440)>0.72)return B_SWAMP;
+  return base }
+const BIOME_G=[hx('#3f6b76'),hx('#83955c'),hx('#5f7a48'),hx('#8b8574'),hx('#5e6a48')];
 const SEASON_W=[0.35,0.8,0.3,0.45];
-const MINICOL=['#3f6b76','#8a9a5e','#48653a','#8b8574'];
+const MINICOL=['#3f6b76','#8a9a5e','#48653a','#8b8574','#525f3a'];
 // cueva: mundo aparte, siempre a oscuras
 const CAVE=1800;
 function caveWallAt(x,y){
@@ -442,6 +445,7 @@ const ITEMS={
   wateringcan:{name:'regadera',passive:true,water:6,tip:'clic dcho: riega el huerto · se rellena en un lago'},
   dung:{name:'estiércol',tip:'clic dcho junto al huerto: abono (lo dejan los bisontes)'},
   rot:{name:'podrido',tip:'la comida caducó... aún sirve de abono (clic dcho)'},
+  reed:{name:'junco',tip:'del pantano; trenza cuerda barata'},
   horn:{name:'cuerno del Astado',tip:'trofeo del terror del invierno'},
   crown:{name:'corona de seda',tip:'trofeo de la Reina de la cueva'},
   armor_wood:{name:'armadura de madera',passive:true,armor:0.6,adur:80,tip:'absorbe 60% del daño en el inventario'},
@@ -483,6 +487,7 @@ const RECIPES=[
   {out:'pickaxe',name:'Pico',cost:{twig:2,flint:2}},
   {out:'torch',name:'Antorcha',cost:{grass:2,twig:1}},
   {out:'rope',name:'Cuerda',cost:{grass:3}},
+  {out:'rope',name:'Cuerda de junco',cost:{reed:2}},
   {out:'boards',name:'Tablas',cost:{wood:2}},
   {out:'trap',name:'Trampa',cost:{grass:2,twig:2},place:'trap'},
   {out:'strawhat',name:'Sombrero de paja',cost:{grass:4,rope:1}},
@@ -525,6 +530,7 @@ const MOBDEF={
   queen:{hp:300,sp:60,dmg:35,rng:62,agro:520,cd:2.0},
   bison:{hp:120,sp:95,dmg:20,rng:50,agro:0,cd:1.6},
   pet:{hp:40,sp:145,dmg:0,rng:0,agro:0,cd:9},
+  frog:{hp:12,sp:95,dmg:6,rng:30,agro:140,cd:1.4},
 };
 const MOB_TIP={spider:['Araña','peligrosa; suelta carne y seda'],wolf:['Lobo','suelta pelaje'],
   rabbit:['Conejo','se caza con clic o trampa'],shadow:['Sombra','fruto de tu locura'],
@@ -533,11 +539,12 @@ const MOB_TIP={spider:['Araña','peligrosa; suelta carne y seda'],wolf:['Lobo','
   treeguard:['Anciano del Bosque','no le gustó que talaras'],
   queen:['Reina de la Seda','guarda el oro de la cueva'],
   bison:['Bisonte','pacífico si tú lo eres; deja estiércol'],
-  pet:['Tu lobito','recoge cosas del suelo por ti']};
+  pet:['Tu lobito','recoge cosas del suelo por ti'],
+  frog:['Rana toro','territorial; suelta carne']};
 const GATE={
-  tree:[0,0.15,1,0.25], rock:[0,0.05,0.2,1], bush:[0,1,0.5,0], grass:[0,1,0.25,0.1],
-  sapling:[0,0.5,1,0.15], flint:[0,0.1,0.15,1], carrot:[0,1,0.1,0], hive:[0,1,0.3,0],
-  den:[0,0,1,0.25],
+  tree:[0,0.15,1,0.25,0.15], rock:[0,0.05,0.2,1,0], bush:[0,1,0.5,0,0], grass:[0,1,0.25,0.1,0.3],
+  sapling:[0,0.5,1,0.15,0.2], flint:[0,0.1,0.15,1,0], carrot:[0,1,0.1,0,0], hive:[0,1,0.3,0,0],
+  den:[0,0,1,0.25,0.4], reedent:[0,0,0,0,1],
 };
 
 // ---------- generación ----------
@@ -609,6 +616,12 @@ function genWorld(){
   add('tree',300,52); add('rock',95,64); add('bush',45,76); add('grass',150,44);
   add('sapling',110,48); add('flint',60,58); add('carrot',30,62); add('hive',9,140);
   add('den',8,60); ents.forEach(e=>{ if(e.type==='den')e.hp=4 });
+  add('reedent',60,44);
+  // ranas del pantano
+  let frogs=0;
+  for(let k=0;k<6000&&frogs<8;k++){ const x=200+Math.random()*(WORLD-400), y=200+Math.random()*(WORLD-400);
+    if(biomeAt(x,y)!==B_SWAMP)continue;
+    spawnMob('frog',x,y); frogs++ }
   // bocas de cueva en el roquedal
   let caves=0;
   for(let k=0;k<6000&&caves<3;k++){ const x=140+Math.random()*(WORLD-280), y=140+Math.random()*(WORLD-280);
@@ -666,8 +679,9 @@ function palNow(){
 }
 function biomeCols(pal){
   const out=[];
-  for(let b=0;b<4;b++){
+  for(let b=0;b<5;b++){
     if(b===B_WATER){ out[b]=mixRGB(BIOME_G[0],hx('#a9c3cc'),pal.snow*0.85) }
+    else if(b===B_SWAMP)out[b]=mixRGB(BIOME_G[b],pal.g,pal.w*0.55);
     else out[b]=mixRGB(BIOME_G[b],pal.g,pal.w);
   }
   return out;
@@ -1019,6 +1033,7 @@ function actLoot(e){
     case 'carrot': e.state='picked'; e.regrow=420; lootFly(e.x,e.y-8,'carrot',1); break;
     case 'flint': e.state='gone'; lootFly(e.x,e.y-6,'flint',1); break;
     case 'mushroom': e.state='gone'; lootFly(e.x,e.y-8,'mushroom',1); break;
+    case 'reedent': e.state='picked'; e.regrow=200; lootFly(e.x,e.y-16,'reed',1+(Math.random()<0.4?1:0)); break;
     case 'hive': e.state='picked'; e.regrow=140;
       lootFly(e.x,e.y-16,'honey',1+(Math.random()<0.5?1:0));
       msg('¡Has enfadado a las abejas!');
@@ -1101,7 +1116,7 @@ function useEnt(e){
       if(e.state!=='ok')return;
       if(!equippedRef||(equippedRef.id!=='pickaxe'&&equippedRef.id!=='pick_gold'))return msg('Necesitas un pico para picar');
       startAct('mine',e,equippedRef.id==='pick_gold'?0.42:0.55); break;
-    case 'grass': case 'sapling': case 'bush': case 'carrot':
+    case 'grass': case 'sapling': case 'bush': case 'carrot': case 'reedent':
       if(e.state!=='ok')return; startAct('pick',e,0.75); break;
     case 'flint': if(e.state!=='ok')return; startAct('pick',e,0.35); break;
     case 'drop': if(e.state!=='ok')return; startAct('pick',e,0.3); break;
@@ -1165,6 +1180,7 @@ function damageMob(m,dmg){
     case 'rabbit': dropAt(m.x,m.y,'meat',1); break;
     case 'wolf': dropAt(m.x,m.y,'fur',2); if(Math.random()<0.5)dropAt(m.x,m.y,'meat',1); break;
     case 'bee': if(Math.random()<0.35)dropAt(m.x,m.y,'honey',1); break;
+    case 'frog': dropAt(m.x,m.y,'meat',1); break;
     case 'bird': dropAt(m.x,m.y,'feather',1); if(Math.random()<0.5)dropAt(m.x,m.y,'meat',1); break;
     case 'bat': if(Math.random()<0.45)dropAt(m.x,m.y,'meat',1); break;
     case 'bison': dropAt(m.x,m.y,'meat',2); dropAt(m.x,m.y,'fur',1); break;
@@ -1325,6 +1341,7 @@ cv.addEventListener('pointermove',e=>{
     grass:['Hierba','clic para recoger'],sapling:['Árbol joven','da ramitas'],
     bush:['Arbusto de bayas','clic para recoger'],carrot:['Zanahoria silvestre','clic para arrancar'],
     flint:['Pedernal','clic para coger'],science:['Máquina de Ciencia','desbloquea recetas'],
+    reedent:['Juncos','clic para recoger (cuerda barata)'],
     chest:['Cofre','clic para abrir'],trap:['Trampa','atrapa conejos solos'],
     goldnode:['Veta de oro','picar con pico'],mushroom:['Seta de cueva','clic para coger'],
     hive:['Colmena silvestre','miel... y abejas furiosas'],
@@ -1444,7 +1461,8 @@ function tick(dt){
   else player.sta=Math.min(100,player.sta+14*dt);
   if(player.sta<=0)player.winded=true;
   if(player.winded&&player.sta>25)player.winded=false;
-  const spd=canSprint?225:150;
+  const mud=!inCave&&biomeAt(player.x,player.y)===B_SWAMP;
+  const spd=(canSprint?225:150)*(mud?0.65:1);
   player.iframes=Math.max(0,player.iframes-dt);
   const acc=Math.min(1,dt*12);
   player.vx=lerp(player.vx,mx*spd,acc); player.vy=lerp(player.vy,my*spd,acc);
@@ -1653,6 +1671,7 @@ function tick(dt){
       if(trapped)continue }
     else if(dp<def.agro){ ang=Math.atan2(player.y-m.y,player.x-m.x); sp=def.sp }
     else { m.wt-=dt; if(m.wt<=0){ m.wa=Math.random()*6.28; m.wt=1.5+Math.random()*2 } ang=m.wa; sp=26 }
+    if(!inCave&&m.type!=='bird'&&m.type!=='bat'&&sp>0&&biomeAt(m.x,m.y)===B_SWAMP)sp*=0.7;
     const mnx=clamp(m.x+Math.cos(ang)*sp*dt,40,WS()-40), mny=clamp(m.y+Math.sin(ang)*sp*dt,40,WS()-40);
     let wallBlock=false;
     if(m.type!=='pet'&&m.type!=='bird')for(const w of walls){
@@ -2027,6 +2046,10 @@ function drawItemIcon(g,id,cx,cy,s){
       g.beginPath(); g.moveTo(-11,-4); g.lineTo(-13,0); g.moveTo(-12,-5); g.lineTo(-15,-2); g.stroke();
       g.strokeStyle=INK; g.lineWidth=2;
       g.beginPath(); g.arc(2,-6,4,Math.PI,0); g.stroke(); break;
+    case 'reed': g.strokeStyle='#5a7a4a'; g.lineWidth=2.8;
+      g.beginPath(); g.moveTo(-3,10); g.lineTo(-1,-8); g.moveTo(3,10); g.lineTo(4,-5); g.stroke();
+      g.fillStyle='#7a6238';
+      g.beginPath(); g.ellipse(-1,-9,2.4,5,0.05,0,7); g.fill(); g.stroke(); break;
     case 'rot': g.fillStyle='#5e6a46';
       g.beginPath(); g.arc(-3,2,5,0,7); g.fill();
       g.beginPath(); g.arc(3,0,4.5,0,7); g.fill();
@@ -2367,6 +2390,34 @@ function drawLamp(e){
   ctx.fillStyle='rgba(255,240,190,'+(0.85*fl)+')';
   rr2(ctx,e.x-4,e.y-57,8,10,2); ctx.fill();
   ctx.fillStyle='#8a6236'; ctx.beginPath(); ctx.arc(e.x,e.y-62,2.6,0,7); ctx.fill(); ctx.stroke() }
+function drawReedEnt(e,pal){
+  const full=e.state==='ok';
+  ctx.strokeStyle='#5a7a4a'; ctx.lineWidth=2.6; ctx.lineCap='round';
+  const n=full?4:2, h=full?1:0.35;
+  for(let i=0;i<n;i++){ const bx=e.x+(i-(n-1)/2)*5;
+    const sw2=Math.sin(time*1.6+e.seed+i)*2.5;
+    ctx.beginPath(); ctx.moveTo(bx,e.y);
+    ctx.quadraticCurveTo(bx+sw2,e.y-16*h,bx+sw2*1.6,e.y-30*h); ctx.stroke() }
+  if(full){ ctx.fillStyle='#7a6238';
+    ctx.beginPath(); ctx.ellipse(e.x+3,e.y-25,2.6,6,0.1,0,7); ctx.fill();
+    ctx.beginPath(); ctx.ellipse(e.x-4,e.y-21,2.2,5,-0.1,0,7); ctx.fill() } }
+function drawFrog(m){
+  const hop=Math.abs(Math.sin(time*7+m.seed))*5, d=m.dirX||1;
+  shadowE(m.x,m.y+1,10);
+  ctx.save(); ctx.translate(m.x,m.y-4-hop); ctx.scale(d,1);
+  ctx.fillStyle=m.hurt>0?'#7a6a38':'#5a7a38'; ctx.strokeStyle=INK; ctx.lineWidth=2.2;
+  ctx.beginPath(); ctx.ellipse(0,0,9,6.5,0,0,7); ctx.fill(); ctx.stroke();
+  ctx.beginPath(); ctx.moveTo(-7,4); ctx.quadraticCurveTo(-12,7,-8,8); ctx.stroke();
+  ctx.beginPath(); ctx.moveTo(7,4); ctx.quadraticCurveTo(12,7,8,8); ctx.stroke();
+  ctx.fillStyle='#e9e2cf';
+  ctx.beginPath(); ctx.arc(3,-6,2.6,0,7); ctx.fill(); ctx.stroke();
+  ctx.beginPath(); ctx.arc(8,-5,2.4,0,7); ctx.fill(); ctx.stroke();
+  ctx.fillStyle=INK;
+  ctx.beginPath(); ctx.arc(3.5,-6,1,0,7); ctx.fill();
+  ctx.beginPath(); ctx.arc(8.5,-5,1,0,7); ctx.fill();
+  ctx.fillStyle='#d8d0b8';
+  ctx.beginPath(); ctx.ellipse(2,3,5,2.6,0,0,7); ctx.fill();
+  ctx.restore() }
 function drawPetBody(x,y,dirX,wag){
   const d=dirX||1;
   ctx.save(); ctx.translate(x,y); ctx.scale(d,1);
@@ -2795,7 +2846,7 @@ function draw(){
        m.type==='boss'?drawBoss:m.type==='bird'?drawBird:m.type==='bee'?drawBee:
        m.type==='bat'?drawBat:m.type==='treeguard'?drawTreeguard:
        m.type==='queen'?drawQueen:m.type==='bison'?drawBison:
-       m.type==='pet'?drawPet:drawSpider)(m);
+       m.type==='pet'?drawPet:m.type==='frog'?drawFrog:drawSpider)(m);
       if(m.hurtShow>0&&m.hp>0){
         const big=m.type==='boss'||m.type==='queen'||m.type==='treeguard';
         const w=big?44:26;
@@ -2820,7 +2871,8 @@ function draw(){
     else if(e.type==='farm')drawFarm(e); else if(e.type==='den')drawDen(e);
     else if(e.type==='portal')drawPortal(e); else if(e.type==='totem')drawTotem(e);
     else if(e.type==='bundle')drawBundle(e); else if(e.type==='pup')drawPup(e);
-    else if(e.type==='wall')drawWall(e); else if(e.type==='lamp')drawLamp(e); }
+    else if(e.type==='wall')drawWall(e); else if(e.type==='lamp')drawLamp(e);
+    else if(e.type==='reedent')drawReedEnt(e,pal); }
   for(const f of flights)drawItemIcon(ctx,f.item,f.x,f.y,0.8);
   // dardos en vuelo
   ctx.strokeStyle='#e0d6bc'; ctx.lineWidth=2.6; ctx.lineCap='round';
@@ -3006,7 +3058,7 @@ window.HAM={
   slotsLen:()=>slots.length,
   equipFirst:id=>{ const i=slots.findIndex(s=>s&&s.id===id); if(i>=0){equippedRef=slots[i];renderInv()} },
   biomeAt:(x,y)=>biomeAt(x,y),
-  biomeStats:()=>{ const c=[0,0,0,0];
+  biomeStats:()=>{ const c=[0,0,0,0,0];
     for(let i=0;i<60;i++)for(let j=0;j<60;j++)c[biomeAt((i+0.5)*WORLD/60,(j+0.5)*WORLD/60)]++;
     return c },
   act:()=>player.act?player.act.kind:null,
