@@ -107,6 +107,30 @@
     width:38px;height:38px;color:#ecdfbd;background:#3a3226;border:2.5px solid #0c0a07;
     border-radius:50%;cursor:pointer;box-shadow:0 3px 5px rgba(0,0,0,.5)}
   #helpBtn:hover{background:#4a4030}
+  #achBtn{position:fixed;right:62px;bottom:14px;z-index:6;font-family:inherit;font-size:16px;
+    width:38px;height:38px;color:#e8b34a;background:#3a3226;border:2.5px solid #0c0a07;
+    border-radius:50%;cursor:pointer;box-shadow:0 3px 5px rgba(0,0,0,.5)}
+  #achBtn:hover{background:#4a4030}
+  #toasts{position:fixed;right:14px;top:88px;z-index:9;display:flex;flex-direction:column;gap:8px}
+  .toast{background:rgba(34,28,20,.96);border:2.5px solid #d8b34a;border-radius:12px;
+    padding:8px 14px;color:#ecdfbd;min-width:200px;animation:tin .35s ease-out;
+    box-shadow:0 4px 12px rgba(0,0,0,.5)}
+  .toast b{color:#e8b34a;font-size:12px;letter-spacing:1.5px;display:block}
+  .toast span{font-size:15px;display:block}
+  .toast i{font-size:11.5px;opacity:.75;font-style:normal;display:block}
+  @keyframes tin{from{transform:translateX(120%);opacity:0}to{transform:none;opacity:1}}
+  #achP{position:fixed;right:14px;bottom:60px;z-index:7;display:none;width:270px;
+    max-height:60vh;overflow-y:auto;background:rgba(34,28,20,.96);border:3px solid #0c0a07;
+    border-radius:14px;padding:12px;color:#ecdfbd}
+  #achP.open{display:block}
+  #achP h3{margin:0 0 8px;font-size:16px;font-weight:normal;text-align:center}
+  .achRow{display:flex;gap:8px;align-items:center;padding:5px 4px;border-radius:8px}
+  .achRow .dot{width:12px;height:12px;border-radius:50%;flex:none;border:2px solid #0c0a07}
+  .achRow.on .dot{background:#e8b34a}
+  .achRow.off{opacity:.45}
+  .achRow.off .dot{background:#3a332a}
+  .achRow b{font-size:14px;display:block;font-weight:normal}
+  .achRow i{font-size:11px;opacity:.75;font-style:normal;display:block}
 
   #joy{position:fixed;left:18px;bottom:90px;z-index:8;touch-action:none;display:none}
   #joyBase{width:124px;height:124px;border-radius:50%;background:rgba(30,25,18,.55);
@@ -183,6 +207,9 @@
 <div id="craft"></div>
 <div id="help">WASD moverte · Shift correr · clic mundo: recolectar / golpear · Espacio usar lo cercano · Tab mapa<br>Inventario — clic izq: coger y mover · clic dcho o teclas 1-9: comer / equipar / plantar<br>Comida cogida + clic en fogata = cocinar · C crear · F cocinar rápido · +/- zoom · M silencio · P pausa</div>
 <button id="helpBtn" title="Controles (H)">?</button>
+<button id="achBtn" title="Logros (L)">★</button>
+<div id="toasts"></div>
+<div id="achP"><h3>Logros</h3><div id="achList"></div></div>
 
 <div id="overlay">
   <h1>HAMBRUNA</h1>
@@ -352,6 +379,39 @@ let inCave=false,caveMade=false,otherWorld=null,caveStore=null,caveReturn=null;
 let projs=[],fadeIn=0,openPot=null,birdT=3;
 let stats={kills:0,crafted:0,cooked:0};
 let banner={t:0,text:''};
+// logros
+const ACHS=[
+  {id:'noche',name:'La primera noche',desc:'amanece el día 2 y sigues vivo'},
+  {id:'manitas',name:'Manitas',desc:'craftea tu primer objeto'},
+  {id:'ciencia',name:'Ilustrado',desc:'construye la Máquina de Ciencia'},
+  {id:'minero',name:'Fiebre del oro',desc:'consigue tu primer oro'},
+  {id:'chef',name:'Chef del bosque',desc:'cocina un plato en la olla'},
+  {id:'pescador',name:'Paciencia de pescador',desc:'pesca tu primer pez'},
+  {id:'lobito',name:'Mejor amigo',desc:'adopta al cachorro perdido'},
+  {id:'invierno',name:'Deshielo',desc:'sobrevive al invierno entero'},
+  {id:'jefe',name:'Matagigantes',desc:'derrota a un jefe'},
+  {id:'dia10',name:'Veterano',desc:'llega al día 10'},
+  {id:'granjero',name:'Cosecha propia',desc:'recoge un cultivo del huerto'},
+  {id:'escapista',name:'El Escapista',desc:'cruza el Portal Umbrío'},
+];
+let achUn={};
+function ach(id){
+  if(achUn[id]||!started)return;
+  achUn[id]=true; sfx('craft');
+  const a=ACHS.find(a=>a.id===id); if(!a)return;
+  const t=document.createElement('div'); t.className='toast';
+  t.innerHTML='<b>★ LOGRO</b><span>'+a.name+'</span><i>'+a.desc+'</i>';
+  $('toasts').append(t);
+  setTimeout(()=>{t.style.transition='opacity .5s';t.style.opacity=0},3800);
+  setTimeout(()=>t.remove(),4400);
+  renderAch() }
+function renderAch(){
+  const el=$('achList'); if(!el)return;
+  el.innerHTML='';
+  for(const a of ACHS){ const r=document.createElement('div');
+    r.className='achRow '+(achUn[a.id]?'on':'off');
+    r.innerHTML='<div class="dot"></div><div><b>'+a.name+'</b><i>'+a.desc+'</i></div>';
+    el.append(r) } }
 let difficulty='normal';
 const DIFF={pacifico:{dmg:0.5,grue:false,wolves:false,hunger:0.8,extra:0},
   normal:{dmg:1,grue:true,wolves:true,hunger:1,extra:0},
@@ -626,6 +686,7 @@ function addItemSlot(sl){ if(!sl)return;
     slots[i]=sl; renderInv(); return }
   addItem(sl.id,sl.n) }
 function addItem(id,n){ n=n||1;
+  if(id==='gold')ach('minero');
   const it=ITEMS[id];
   if(it.tool||it.passive){
     addItemSlot(it.tool?{id,tool:true,dur:it.dur,max:it.dur}:
@@ -836,7 +897,8 @@ function craft(r){ if(dead||paused)return;
       .map(e=>(e[1]-count(e[0]))+' '+ITEMS[e[0]].name);
     return msg('Te falta: '+miss.join(', ')) }
   Object.entries(r.cost).forEach(e=>consume(e[0],e[1]));
-  stats.crafted++;
+  stats.crafted++; ach('manitas');
+  if(r.place==='science')ach('ciencia');
   player.craftA=0.7; player.act=null; sfx('craft'); burstP(player.x,player.y-50,10,'#ffd76a',60,true);
   const pp=placePos();
   if(r.place==='fire'){ fires.push({x:pp.x,y:pp.y,fuel:45,max:90,seed:Math.random()*100});
@@ -896,6 +958,7 @@ function renderCraft(){ RECIPES.forEach(r=>{
   r.mkEl.textContent=(n>0&&isFinite(n)&&!(r.sci&&!scienceBuilt))?'×'+n:'' }) }
 $('craftBtn').onclick=()=>craftEl.classList.toggle('open');
 $('helpBtn').onclick=()=>$('help').classList.toggle('open');
+$('achBtn').onclick=()=>{ renderAch(); $('achP').classList.toggle('open') };
 
 // ---------- mensajes / floats / partículas ----------
 const msgsEl=$('msgs');
@@ -946,7 +1009,7 @@ function tickAct(dt){
     if(a.t<a.dur)return;
     useTool();
     if(Math.random()<0.75){ burstP(a.spot.x,a.spot.y,8,'rgba(190,220,240,0.9)',70);
-      lootFly(a.spot.x,a.spot.y-8,'fish',1); sfx('pop') }
+      lootFly(a.spot.x,a.spot.y-8,'fish',1); sfx('pop'); ach('pescador') }
     else { float(a.spot.x,a.spot.y-14,'se escapó...','#aac8dc') }
     player.act=null; return }
   if(a.kind==='cook'){
@@ -1030,7 +1093,7 @@ function useEnt(e){
       else msg('Las abejas siguen trabajando...'); break;
     case 'farm':
       if(e.crop&&e.crop.t>=e.crop.max){ lootFly(e.x,e.y-14,e.crop.type,1);
-        if(Math.random()<0.25)lootFly(e.x,e.y-6,'seeds',1); e.crop=null; sfx('pick') }
+        if(Math.random()<0.25)lootFly(e.x,e.y-6,'seeds',1); e.crop=null; sfx('pick'); ach('granjero') }
       else if(e.crop)msg('Está creciendo... ('+Math.round(e.crop.t/e.crop.max*100)+'%)');
       else msg('Huerto vacío: planta semillas con clic derecho'); break;
     case 'den': if(e.state!=='ok')return; startAct('smash',e,0.6); break;
@@ -1039,7 +1102,7 @@ function useEnt(e){
     case 'totem': msg(e.state==='ok'?'Tótem de retorno: te revivirá una vez':'Este tótem ya se gastó'); break;
     case 'pup':
       if(mobs.some(m=>m.type==='pet'))return msg('Ya tienes a tu lobito');
-      e.state='gone'; spawnMob('pet',e.x,e.y);
+      e.state='gone'; spawnMob('pet',e.x,e.y); ach('lobito');
       sfx('pop'); msg('El cachorro te adopta a ti. Recogerá cosas del suelo.'); break;
     case 'wall': if(e.state!=='ok')return; startAct('smash',e,0.5); break;
   } }
@@ -1074,12 +1137,12 @@ function damageMob(m,dmg){
     case 'bat': if(Math.random()<0.45)dropAt(m.x,m.y,'meat',1); break;
     case 'bison': dropAt(m.x,m.y,'meat',2); dropAt(m.x,m.y,'fur',1); break;
     case 'treeguard': dropAt(m.x,m.y,'wood',4); dropAt(m.x,m.y,'pinecone',2);
-      player.san=clamp(player.san+15,0,100); msg('El Anciano vuelve a ser madera.'); break;
+      player.san=clamp(player.san+15,0,100); msg('El Anciano vuelve a ser madera.'); ach('jefe'); break;
     case 'queen': dropAt(m.x,m.y,'gold',4); dropAt(m.x,m.y,'silk',5); dropAt(m.x,m.y,'meat',3);
-      dropAt(m.x,m.y,'crown',1);
+      dropAt(m.x,m.y,'crown',1); ach('jefe');
       msg('La Reina de la Seda ha caído. Su corona brilla en el suelo.'); shake=0.5; break;
     case 'boss': dropAt(m.x,m.y,'meat',4); dropAt(m.x,m.y,'fur',2); dropAt(m.x,m.y,'horn',1);
-      bossDone=true; msg('El Astado ha caído. Su cuerno es tuyo.'); shake=0.6; break;
+      bossDone=true; msg('El Astado ha caído. Su cuerno es tuyo.'); shake=0.6; ach('jefe'); break;
     case 'shadow': player.san=clamp(player.san+12,0,100); float(m.x,m.y-44,'+cordura','#9fd7ff'); break;
   }
   mobs.splice(mobs.indexOf(m),1); }
@@ -1162,6 +1225,7 @@ addEventListener('keydown',e=>{ const k=e.key.toLowerCase(); keys[k]=true;
   if(k==='c')craftEl.classList.toggle('open');
   if(k==='f')cook();
   if(k==='h')$('help').classList.toggle('open');
+  if(k==='l'){ renderAch(); $('achP').classList.toggle('open') }
   if(k==='m'){ muted=!muted; msg(muted?'Sonido apagado':'Sonido encendido') }
   if(k==='p'&&started&&!dead){ paused=!paused; msg(paused?'Pausa':'Seguimos') }
   if(k>='1'&&k<='9'&&started&&!dead&&!paused){ const i=+k-1;
@@ -1310,7 +1374,7 @@ function spawnNightMobs(){
 function store(){ try{ const s=window.localStorage; s.getItem('x'); return s }catch(e){ return null } }
 function save(){ const s=store(); if(!s||dead)return;
   try{ s.setItem('hambruna',JSON.stringify({v:6,day,time,temp,scienceBuilt,bossDone,prevSeason,worldSeed,
-    inCave,caveMade,caveReturn,stats,difficulty,
+    inCave,caveMade,caveReturn,stats,difficulty,ach:achUn,
     player,slots,held,equipped:slots.indexOf(equippedRef),
     active:packWorld(), other:inCave?otherWorld:caveStore})) }catch(e){} }
 function loadSave(){ const s=store(); if(!s)return null;
@@ -1320,7 +1384,7 @@ function applySave(d){
   day=d.day; time=d.time; temp=d.temp; scienceBuilt=d.scienceBuilt; bossDone=d.bossDone;
   prevSeason=d.prevSeason; worldSeed=d.worldSeed;
   inCave=d.inCave; caveMade=d.caveMade; caveReturn=d.caveReturn; stats=d.stats||{kills:0,crafted:0,cooked:0};
-  difficulty=d.difficulty||'normal';
+  difficulty=d.difficulty||'normal'; achUn=d.ach||{};
   Object.assign(player,d.player); player.act=null; slots=d.slots; held=d.held||null;
   equippedRef=d.equipped>=0?slots[d.equipped]:null;
   loadWorld(d.active);
@@ -1464,6 +1528,9 @@ function tick(dt){
     mobs=mobs.filter(m=>m.type!=='bird'); spawnNightMobs() }
   if(u<lastU){ day++;
     banner={t:2.6,text:'Día '+day};
+    if(day===2)ach('noche');
+    if(day===10)ach('dia10');
+    if(day===7)ach('invierno');
     const si=seasonIdx(day);
     if(si!==prevSeason){ prevSeason=si; msg(SEASON_MSG[si]) }
     if(!inCave){
@@ -1598,6 +1665,7 @@ function tick(dt){
       if(Math.random()<dt*8)spawnP({x:e.x+Math.random()*10-5,y:e.y-26,vx:Math.random()*8-4,
         vy:-26,g:-6,t:0.9,max:0.9,r:2.6,color:'rgba(230,220,190,0.55)'});
       if(e.cooking<=0){ e.cooking=0; e.out=e.outPending; e.outPending=null; sfx('pop'); stats.cooked++;
+        ach('chef');
         float(e.x,e.y-46,ITEMS[e.out].name+' — listo','#ffd27a') }
       if(openPot===e)renderPot() }
     if(e.type==='beebox'&&e.hstore<3){ e.ht-=dt;
@@ -1725,6 +1793,7 @@ function winGame(){
     '<div class="sub">Escapaste del bosque tras '+day+' '+(day===1?'día':'días')+'. Venciste al Astado y a la Reina para abrir el camino.<br>'+statsLine()+'</div>'+
     '<button id="againBtn">Otra vez</button><button id="stayBtn" class="ghost">Seguir jugando</button>';
   o.style.display='flex';
+  ach('escapista');
   throwConfetti(o); sfx('craft');
   $('againBtn').onclick=()=>{ clearSave(); location.reload() };
   $('stayBtn').onclick=()=>{ o.style.display='none'; paused=false };
@@ -2901,6 +2970,7 @@ window.HAM={
   setDiff:d=>{ difficulty=d },
   diff:()=>difficulty,
   setTemp:t=>{ temp=t },
+  achs:()=>Object.keys(achUn),
   dropTest:(id,n,dx)=>dropAt(player.x+(dx||100),player.y,id,n||1),
   adopt:()=>{ const e=ents.find(e=>e.type==='pup'&&e.state==='ok'); if(e)useEnt(e); return !!e },
   setStorm:k=>{ storm=k?{kind:k,t:20}:null; stormT=40; if(k==='thunder')thunderCd=0.5 },
