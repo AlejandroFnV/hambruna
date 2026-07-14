@@ -2,7 +2,7 @@
 <html lang="es">
 <head>
 <meta charset="utf-8">
-<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
 <meta name="description" content="Hambruna — juego de supervivencia hecho a mano: biomas, estaciones, cuevas, jefes y un portal para escapar.">
 <link rel="icon" href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22><text y=%22.9em%22 font-size=%2290%22>🔥</text></svg>">
 <title>Hambruna — sobrevive a la noche</title>
@@ -103,6 +103,16 @@
     width:38px;height:38px;color:#ecdfbd;background:#3a3226;border:2.5px solid #0c0a07;
     border-radius:50%;cursor:pointer;box-shadow:0 3px 5px rgba(0,0,0,.5)}
   #helpBtn:hover{background:#4a4030}
+
+  #joy{position:fixed;left:18px;bottom:90px;z-index:8;touch-action:none;display:none}
+  #joyBase{width:124px;height:124px;border-radius:50%;background:rgba(30,25,18,.55);
+    border:3px solid rgba(12,10,7,.8);position:relative}
+  #joyKnob{width:52px;height:52px;border-radius:50%;background:rgba(236,223,189,.85);
+    border:3px solid #0c0a07;position:absolute;left:33px;top:33px;transition:transform .05s}
+  #tbtns{position:fixed;right:14px;bottom:90px;z-index:8;display:none;flex-direction:column;gap:10px}
+  .tbtn{font-family:inherit;font-size:13px;width:74px;height:52px;color:#ecdfbd;
+    background:rgba(58,50,38,.85);border:3px solid #0c0a07;border-radius:14px;touch-action:none}
+  body.touch #joy,body.touch #tbtns{display:flex}
 
   #overlay{position:fixed;inset:0;background:rgba(8,6,4,.9);z-index:10;display:flex;
     align-items:center;justify-content:center;flex-direction:column;color:#ecdfbd;text-align:center;padding:20px}
@@ -694,7 +704,7 @@ function makeSlotEl(arr,i,parent){
   const bar=document.createElement('i'); dur.append(bar);
   d.append(c,n,dur);
   d.addEventListener('pointerdown',e=>{ if(dead||paused)return;
-    if(e.button===2)useItem(arr,i); else cellLeft(arr,i) });
+    if(e.pointerType==='touch'||e.button===2)useItem(arr,i); else cellLeft(arr,i) });
   d.addEventListener('contextmenu',e=>e.preventDefault());
   d.addEventListener('mouseenter',()=>{ const s=arr[i];
     if(s)showTip(ITEMS[s.id].name+(s.tool?' ('+Math.round(s.dur)+')':''),ITEMS[s.id].tip||'') });
@@ -1092,6 +1102,41 @@ function spaceAction(){
   if(!best)return;
   if(kind==='mob')hitMob(best); else if(kind==='fire')feedFire(best); else useEnt(best) }
 
+// ---------- táctil: joystick virtual propio + botones ----------
+const isTouch=('ontouchstart' in window)||matchMedia('(pointer: coarse)').matches;
+let touchVec={x:0,y:0};
+function initTouch(){
+  if(!isTouch)return;
+  document.body.classList.add('touch');
+  if(Math.min(innerWidth,innerHeight)<700)ZOOM=1.15;
+  const jz=document.createElement('div'); jz.id='joy';
+  jz.innerHTML='<div id="joyBase"><div id="joyKnob"></div></div>';
+  document.body.append(jz);
+  const base=jz.firstChild, knob=base.firstChild;
+  let tid=null;
+  const setKnob=(dx,dy)=>{ knob.style.transform='translate('+dx+'px,'+dy+'px)' };
+  const move=t=>{ const r=base.getBoundingClientRect();
+    let dx=t.clientX-(r.left+r.width/2), dy=t.clientY-(r.top+r.height/2);
+    const d=Math.hypot(dx,dy), mx2=r.width/2;
+    if(d>mx2){ dx*=mx2/d; dy*=mx2/d }
+    setKnob(dx,dy); touchVec.x=dx/mx2; touchVec.y=dy/mx2 };
+  jz.addEventListener('touchstart',e=>{ e.preventDefault();
+    tid=e.changedTouches[0].identifier; move(e.changedTouches[0]) },{passive:false});
+  jz.addEventListener('touchmove',e=>{ e.preventDefault();
+    for(const t of e.changedTouches)if(t.identifier===tid)move(t) },{passive:false});
+  const end=()=>{ touchVec.x=0; touchVec.y=0; setKnob(0,0); tid=null };
+  jz.addEventListener('touchend',end); jz.addEventListener('touchcancel',end);
+  const wrap=document.createElement('div'); wrap.id='tbtns'; document.body.append(wrap);
+  const mkB=(label,fn)=>{ const b=document.createElement('button'); b.className='tbtn'; b.textContent=label;
+    b.addEventListener('touchstart',e=>{ e.preventDefault(); fn() },{passive:false});
+    b.addEventListener('pointerdown',e=>{ if(e.pointerType!=='touch')fn() });
+    wrap.append(b) };
+  mkB('USAR',()=>spaceAction());
+  mkB('CREAR',()=>craftEl.classList.toggle('open'));
+  mkB('COCINAR',()=>cook());
+  mkB('MAPA',()=>{ if(!inCave)showMap=!showMap });
+}
+initTouch();
 // ---------- input ----------
 const keys={};
 addEventListener('keydown',e=>{ const k=e.key.toLowerCase(); keys[k]=true;
@@ -1275,6 +1320,7 @@ function tick(dt){
   const u=cycleU(), sIdx=seasonIdx(day);
   let mx=((keys.d||keys.arrowright)?1:0)-((keys.a||keys.arrowleft)?1:0);
   let my=((keys.s||keys.arrowdown)?1:0)-((keys.w||keys.arrowup)?1:0);
+  if(Math.hypot(touchVec.x,touchVec.y)>0.18){ mx=touchVec.x; my=touchVec.y }
   if(mx||my){ const l=Math.hypot(mx,my); mx/=l; my/=l;
     if(player.act)player.act=null;
     if(mx)player.face=mx>0?1:-1 }
