@@ -181,7 +181,7 @@
 </div>
 <button id="craftBtn">Crear (C)</button>
 <div id="craft"></div>
-<div id="help">WASD moverte · clic mundo: recolectar / golpear · Espacio usar lo cercano · Tab mapa<br>Inventario — clic izq: coger y mover · clic dcho o teclas 1-9: comer / equipar / plantar<br>Comida cogida + clic en fogata = cocinar · C crear · F cocinar rápido · +/- zoom · M silencio · P pausa</div>
+<div id="help">WASD moverte · Shift correr · clic mundo: recolectar / golpear · Espacio usar lo cercano · Tab mapa<br>Inventario — clic izq: coger y mover · clic dcho o teclas 1-9: comer / equipar / plantar<br>Comida cogida + clic en fogata = cocinar · C crear · F cocinar rápido · +/- zoom · M silencio · P pausa</div>
 <button id="helpBtn" title="Controles (H)">?</button>
 
 <div id="overlay">
@@ -338,7 +338,8 @@ function musicTick(){
 let ents=[],mobs=[],fires=[],floats=[],deco=[],particles=[],flies=[],flights=[];
 let slots=Array(12).fill(null), equippedRef=null, held=null, openChest=null;
 let player={x:WORLD/2,y:WORLD/2,hp:100,hun:100,san:100,face:1,moving:false,swing:0,craftA:0,
-  vx:0,vy:0,walkT:0,act:null,eatA:0,eatId:null};
+  vx:0,vy:0,walkT:0,act:null,eatA:0,eatId:null,sta:100,winded:false,iframes:0};
+let sprintTouch=false;
 let cam={x:0,y:0},camLook=0;
 let time=0,day=1,started=false,dead=false,paused=false,showMap=false;
 let temp=70,scienceBuilt=false,bossDone=false,prevSeason=0;
@@ -1145,6 +1146,11 @@ function initTouch(){
   mkB('CREAR',()=>craftEl.classList.toggle('open'));
   mkB('COCINAR',()=>cook());
   mkB('MAPA',()=>{ if(!inCave)showMap=!showMap });
+  const run=document.createElement('button'); run.className='tbtn'; run.textContent='CORRER';
+  run.addEventListener('touchstart',e=>{ e.preventDefault(); sprintTouch=true },{passive:false});
+  run.addEventListener('touchend',()=>{ sprintTouch=false });
+  run.addEventListener('touchcancel',()=>{ sprintTouch=false });
+  wrap.append(run);
 }
 initTouch();
 // ---------- input ----------
@@ -1334,15 +1340,24 @@ function tick(dt){
   if(mx||my){ const l=Math.hypot(mx,my); mx/=l; my/=l;
     if(player.act)player.act=null;
     if(mx)player.face=mx>0?1:-1 }
+  // correr (Shift / botón táctil) con aguante
+  const wantSprint=(keys.shift||sprintTouch)&&(mx||my);
+  const canSprint=wantSprint&&!player.winded&&player.sta>0;
+  if(canSprint)player.sta=Math.max(0,player.sta-22*dt);
+  else player.sta=Math.min(100,player.sta+14*dt);
+  if(player.sta<=0)player.winded=true;
+  if(player.winded&&player.sta>25)player.winded=false;
+  const spd=canSprint?225:150;
+  player.iframes=Math.max(0,player.iframes-dt);
   const acc=Math.min(1,dt*12);
-  player.vx=lerp(player.vx,mx*150,acc); player.vy=lerp(player.vy,my*150,acc);
+  player.vx=lerp(player.vx,mx*spd,acc); player.vy=lerp(player.vy,my*spd,acc);
   if(!mx&&!my){ player.vx*=Math.max(0,1-dt*11); player.vy*=Math.max(0,1-dt*11) }
   const nx=clamp(player.x+player.vx*dt,30,WS()-30), ny=clamp(player.y+player.vy*dt,30,WS()-30);
   if(!blockedAt(nx,ny)){ player.x=nx; player.y=ny }
   else if(!blockedAt(nx,player.y)){ player.x=nx; player.vy=0 }
   else if(!blockedAt(player.x,ny)){ player.y=ny; player.vx=0 }
   else { player.vx=0; player.vy=0 }
-  const spdN=Math.hypot(player.vx,player.vy)/150;
+  const spdN=Math.hypot(player.vx,player.vy)/spd;
   player.moving=spdN>0.15;
   player.walkT+=dt*11*spdN;
   stepAcc+=dt*spdN*3.2;
@@ -1548,8 +1563,12 @@ function tick(dt){
     else if(!blockedAt(m.x,mny))m.y=mny;
     else m.wa=Math.random()*6.28;
     m.atk-=dt; m.hurt=Math.max(0,m.hurt-dt); m.hurtShow=Math.max(0,(m.hurtShow||0)-dt);
-    if(def.dmg&&dp<def.rng&&m.atk<=0&&!(m.type==='bison'&&!(m.rage>0))){ m.atk=def.cd;
+    if(def.dmg&&dp<def.rng&&m.atk<=0&&player.iframes<=0&&!(m.type==='bison'&&!(m.rage>0))){ m.atk=def.cd;
       damagePlayer(def.dmg,'las criaturas'); flashRed=0.4; shake=m.type==='boss'?0.5:0.25;
+      player.iframes=0.9;
+      const ka=Math.atan2(player.y-m.y,player.x-m.x);
+      const kx=clamp(player.x+Math.cos(ka)*36,30,WS()-30), ky=clamp(player.y+Math.sin(ka)*36,30,WS()-30);
+      if(!blockedAt(kx,ky)){ player.x=kx; player.y=ky }
       sfx('hurt'); float(player.x,player.y-70,'-'+def.dmg,'#ff6b5e') }
     if(m.type==='boss'||m.type==='treeguard'){ m.stepT=(m.stepT||0)-dt;
       if(m.stepT<=0){ m.stepT=0.85; if(dp<700){ shake=Math.max(shake,0.22*(1-dp/700)); sfx('thud') } } }
@@ -2474,7 +2493,9 @@ function drawBoss(m){
   ctx.restore() }
 function drawPlayer(){
   const p=player;
-  const spdN=Math.hypot(p.vx,p.vy)/150;
+  const blink=p.iframes>0&&Math.sin(time*30)>0;
+  if(blink)ctx.globalAlpha=0.45;
+  const spdN=Math.min(1,Math.hypot(p.vx,p.vy)/150);
   const st=Math.sin(p.walkT)*spdN;
   const bounce=p.moving?Math.abs(Math.sin(p.walkT))*3*spdN:Math.sin(time*2)*0.8;
   const lean=st*0.06+(p.act&&p.act.kind==='pick'?0.16:0);
@@ -2551,6 +2572,7 @@ function drawPlayer(){
     ctx.fillStyle='rgba(0,0,0,.4)'; ctx.beginPath(); ctx.arc(p.x,p.y-84,10,0,7); ctx.fill();
     ctx.strokeStyle='#ffd76a'; ctx.lineWidth=3.5;
     ctx.beginPath(); ctx.arc(p.x,p.y-84,10,-Math.PI/2,-Math.PI/2+k*Math.PI*2); ctx.stroke() }
+  ctx.globalAlpha=1;
 }
 
 function draw(){
@@ -2802,6 +2824,11 @@ function draw(){
     for(const e of ents){ if(e.type==='science')dot(e.x,e.y,'#8fd6e8',2.5);
       else if(e.type==='chest')dot(e.x,e.y,'#d8b34a',2.5) }
     dot(player.x,player.y,'#fff',3.2) }
+  if(started&&player.sta<99.5){ // barra de aguante
+    const bw=170, bx=vw/2-bw/2, by=vh-92;
+    ctx.fillStyle='rgba(0,0,0,.5)'; ctx.fillRect(bx-2,by-2,bw+4,10);
+    ctx.fillStyle=player.winded?'#c34532':'#a8c05a';
+    ctx.fillRect(bx,by,bw*clamp(player.sta/100,0,1),6) }
   if(paused){ ctx.fillStyle='rgba(8,6,4,.55)'; ctx.fillRect(0,0,vw,vh);
     ctx.fillStyle='#ecdfbd'; ctx.font='42px "Patrick Hand","Chalkboard SE","Comic Sans MS",cursive';
     ctx.textAlign='center'; ctx.fillText('PAUSA',vw/2,vh/2) }
@@ -2854,6 +2881,7 @@ window.HAM={
   state:()=>({hp:Math.round(player.hp),hun:Math.round(player.hun),san:Math.round(player.san),
     temp:Math.round(temp),day,season:SEASONS[seasonIdx(day)],u:+cycleU().toFixed(3),
     x:Math.round(player.x),y:Math.round(player.y),inCave,
+    sta:Math.round(player.sta),iframes:+player.iframes.toFixed(2),
     mobs:mobs.map(m=>m.type),fires:fires.length,science:scienceBuilt,parts:particles.length}),
   give:(id,n)=>addItem(id,n||1),
   craftByName:n=>{ const r=RECIPES.find(r=>r.name.startsWith(n)); if(r)craft(r) },
