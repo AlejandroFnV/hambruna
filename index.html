@@ -617,6 +617,20 @@ function genWorld(){
   add('sapling',110,48); add('flint',60,58); add('carrot',30,62); add('hive',9,140);
   add('den',8,60); ents.forEach(e=>{ if(e.type==='den')e.hp=4 });
   add('reedent',60,44);
+  // ruinas antiguas: círculo de columnas rotas + cofre reliquia
+  let ruins=0;
+  for(let k=0;k<8000&&ruins<5;k++){
+    const x=400+Math.random()*(WORLD-800), y=400+Math.random()*(WORLD-800);
+    if(blockedAt(x,y)||Math.hypot(x-WORLD/2,y-WORLD/2)<600)continue;
+    let far=true;
+    for(const e of ents){ if(e.type==='ruinchest'&&Math.hypot(e.x-x,e.y-y)<600){far=false;break} }
+    if(!far)continue;
+    const np=4+Math.floor(Math.random()*3);
+    for(let i=0;i<np;i++){ const a=i/np*6.28+Math.random()*0.5, d=55+Math.random()*30;
+      const px=x+Math.cos(a)*d, py=y+Math.sin(a)*d;
+      if(!blockedAt(px,py))ents.push({type:'pillar',x:px,y:py,seed:Math.random()*100,state:'ok',regrow:0,shake:0}) }
+    ents.push({type:'ruinchest',x,y,seed:Math.random()*100,state:'ok',regrow:0,shake:0});
+    ruins++ }
   // ranas del pantano
   let frogs=0;
   for(let k=0;k<6000&&frogs<8;k++){ const x=200+Math.random()*(WORLD-400), y=200+Math.random()*(WORLD-400);
@@ -1034,6 +1048,17 @@ function actLoot(e){
     case 'flint': e.state='gone'; lootFly(e.x,e.y-6,'flint',1); break;
     case 'mushroom': e.state='gone'; lootFly(e.x,e.y-8,'mushroom',1); break;
     case 'reedent': e.state='picked'; e.regrow=200; lootFly(e.x,e.y-16,'reed',1+(Math.random()<0.4?1:0)); break;
+    case 'ruinchest': { e.state='gone';
+      const LOOT=[['gold',2],['silk',2],['dart',2],['boards',2],['venda',1],['seeds',2],
+        ['honey',2],['pinecone',1],['rope',2],['flint',3]];
+      const rolls=3+(Math.random()<0.5?1:0);
+      for(let i=0;i<rolls;i++){ const L=LOOT[Math.floor(Math.random()*LOOT.length)];
+        lootFly(e.x+Math.random()*30-15,e.y-10,L[0],L[1]) }
+      burstP(e.x,e.y-14,12,'#d8b34a',80); sfx('craft');
+      if(Math.random()<0.35){ msg('¡Era un cebo! Algo despierta entre las ruinas...');
+        for(let i=0;i<3;i++)spawnMob('spider',e.x+Math.random()*80-40,e.y+Math.random()*80-40) }
+      else msg('El cofre reliquia cede su tesoro');
+      break }
     case 'hive': e.state='picked'; e.regrow=140;
       lootFly(e.x,e.y-16,'honey',1+(Math.random()<0.5?1:0));
       msg('¡Has enfadado a las abejas!');
@@ -1147,6 +1172,8 @@ function useEnt(e){
     case 'portal': winGame(); break;
     case 'bundle': if(e.state!=='ok')return; startAct('pick',e,0.5); break;
     case 'totem': msg(e.state==='ok'?'Tótem de retorno: te revivirá una vez':'Este tótem ya se gastó'); break;
+    case 'ruinchest': if(e.state!=='ok')return; startAct('pick',e,0.9); break;
+    case 'pillar': msg('Una columna de otro tiempo. Aguanta más que tú.'); break;
     case 'pup':
       if(mobs.some(m=>m.type==='pet'))return msg('Ya tienes a tu lobito');
       e.state='gone'; spawnMob('pet',e.x,e.y); ach('lobito');
@@ -1219,6 +1246,7 @@ function spaceAction(){
   for(const m of mobs){ if(m.type==='pet')continue;
     const d=dist(m,player); if(d<72&&d<bd){bd=d;best=m;kind='mob'} }
   for(const e of ents){ if(e.state!=='ok'&&e.state!=='full')continue;
+    if(e.type==='pillar')continue;
     const d=dist(e,player); if(d<REACH&&d<bd){bd=d;best=e;kind='ent'} }
   for(const f of fires){ const d=dist(f,player); if(d<REACH&&d<bd){bd=d;best=f;kind='fire'} }
   if(!best)return;
@@ -1357,7 +1385,9 @@ cv.addEventListener('pointermove',e=>{
     pup:['Cachorro perdido','clic para adoptarlo'],
     wall:['Muro de piedra','frena a los bichos; golpéalo para retirarlo'],
     lamp:['Farol de poste','luz eterna; no calienta'],
-    icebox:['Nevera','la comida dentro dura 4× más']};
+    icebox:['Nevera','la comida dentro dura 4× más'],
+    ruinchest:['Cofre reliquia','algo brilla dentro... clic para saquearlo'],
+    pillar:['Columna rota','ruinas de otro tiempo']};
   let tt=TIPS[en.type]||[en.type,''];
   if(en.type==='drop')tt=[ITEMS[en.item].name+(en.n>1?' ×'+en.n:''),'clic para coger'];
   if(en.state==='growing')tt=['Brote','está creciendo'];
@@ -1488,10 +1518,10 @@ function tick(dt){
   tickAct(dt);
   if(openChest&&dist(openChest,player)>170)closeChest();
   for(const e of ents){ if(e.state!=='ok')continue;
-    if(e.type!=='tree'&&e.type!=='rock'&&e.type!=='wall')continue;
+    if(e.type!=='tree'&&e.type!=='rock'&&e.type!=='wall'&&e.type!=='pillar')continue;
     const dx=player.x-e.x, dy=player.y-(e.y-4);
     if(Math.abs(dx)>44||Math.abs(dy)>44)continue;
-    const rr=(e.type==='tree'?20:e.type==='wall'?22:24)+11, d=Math.hypot(dx,dy);
+    const rr=(e.type==='tree'?20:e.type==='wall'?22:e.type==='pillar'?15:24)+11, d=Math.hypot(dx,dy);
     if(d<rr&&d>0.01){ const p=(rr-d); player.x+=dx/d*p; player.y+=dy/d*p } }
   camLook=lerp(camLook,player.face*46,Math.min(1,dt*2.5));
   const tcx=clamp(player.x+camLook-VW()/2,0,Math.max(0,WS()-VW()));
@@ -1616,7 +1646,7 @@ function tick(dt){
   if(player.san>35)mobs=mobs.filter(m=>m.type!=='shadow');
 
   const traps=ents.filter(e=>e.type==='trap'&&e.state==='ok');
-  const walls=ents.filter(e=>e.type==='wall'&&e.state==='ok');
+  const walls=ents.filter(e=>(e.type==='wall'||e.type==='pillar')&&e.state==='ok');
   for(const m of [...mobs]){
     const def=MOBDEF[m.type], dp=dist(m,player);
     let ang=m.wa,sp=0;
@@ -2390,6 +2420,32 @@ function drawLamp(e){
   ctx.fillStyle='rgba(255,240,190,'+(0.85*fl)+')';
   rr2(ctx,e.x-4,e.y-57,8,10,2); ctx.fill();
   ctx.fillStyle='#8a6236'; ctx.beginPath(); ctx.arc(e.x,e.y-62,2.6,0,7); ctx.fill(); ctx.stroke() }
+function drawPillar(e){
+  shadowE(e.x,e.y+2,14);
+  const h=28+((e.seed*7)%22);
+  ctx.strokeStyle=INK; ctx.lineWidth=2.6;
+  ctx.fillStyle='#a8a294';
+  ctx.beginPath();
+  ctx.moveTo(e.x-8,e.y); ctx.lineTo(e.x-7,e.y-h);
+  ctx.lineTo(e.x-3,e.y-h-4); ctx.lineTo(e.x+3,e.y-h+2);
+  ctx.lineTo(e.x+7,e.y-h-2); ctx.lineTo(e.x+8,e.y);
+  ctx.closePath(); ctx.fill(); ctx.stroke();
+  ctx.strokeStyle='#8a8476'; ctx.lineWidth=1.6;
+  ctx.beginPath(); ctx.moveTo(e.x-4,e.y-6); ctx.lineTo(e.x-4,e.y-h+8);
+  ctx.moveTo(e.x+3,e.y-4); ctx.lineTo(e.x+3,e.y-h+12); ctx.stroke();
+  ctx.strokeStyle='#5a7a4a'; ctx.lineWidth=1.8;
+  ctx.beginPath(); ctx.moveTo(e.x-8,e.y-4); ctx.quadraticCurveTo(e.x-2,e.y-10,e.x-6,e.y-16); ctx.stroke() }
+function drawRuinchest(e){
+  shadowE(e.x,e.y+2,20);
+  const pu=0.5+0.5*Math.sin(time*2.2+e.seed);
+  ctx.fillStyle='rgba(216,179,74,'+(0.12*pu)+')';
+  ctx.beginPath(); ctx.arc(e.x,e.y-12,26,0,7); ctx.fill();
+  ctx.strokeStyle=INK; ctx.lineWidth=3;
+  ctx.fillStyle='#8a8476'; rr2(ctx,e.x-17,e.y-22,34,24,3); ctx.fill(); ctx.stroke();
+  ctx.fillStyle='#a8a294'; rr2(ctx,e.x-17,e.y-22,34,9,3); ctx.fill(); ctx.stroke();
+  ctx.strokeStyle='#5a7a4a'; ctx.lineWidth=2;
+  ctx.beginPath(); ctx.moveTo(e.x-17,e.y-6); ctx.quadraticCurveTo(e.x-8,e.y-2,e.x-14,e.y+2); ctx.stroke();
+  ctx.fillStyle='#d8b34a'; ctx.beginPath(); ctx.arc(e.x,e.y-11,3.4,0,7); ctx.fill(); ctx.stroke() }
 function drawReedEnt(e,pal){
   const full=e.state==='ok';
   ctx.strokeStyle='#5a7a4a'; ctx.lineWidth=2.6; ctx.lineCap='round';
@@ -2872,7 +2928,8 @@ function draw(){
     else if(e.type==='portal')drawPortal(e); else if(e.type==='totem')drawTotem(e);
     else if(e.type==='bundle')drawBundle(e); else if(e.type==='pup')drawPup(e);
     else if(e.type==='wall')drawWall(e); else if(e.type==='lamp')drawLamp(e);
-    else if(e.type==='reedent')drawReedEnt(e,pal); }
+    else if(e.type==='reedent')drawReedEnt(e,pal);
+    else if(e.type==='pillar')drawPillar(e); else if(e.type==='ruinchest')drawRuinchest(e); }
   for(const f of flights)drawItemIcon(ctx,f.item,f.x,f.y,0.8);
   // dardos en vuelo
   ctx.strokeStyle='#e0d6bc'; ctx.lineWidth=2.6; ctx.lineCap='round';
@@ -3006,7 +3063,8 @@ function draw(){
       ctx.arc(mx+x/WORLD*160,my+y/WORLD*160,r,0,7); ctx.fill() };
     for(const f of fires)if(f.fuel>0)dot(f.x,f.y,'#ff9a3a',2.5);
     for(const e of ents){ if(e.type==='science')dot(e.x,e.y,'#8fd6e8',2.5);
-      else if(e.type==='chest')dot(e.x,e.y,'#d8b34a',2.5) }
+      else if(e.type==='chest'||e.type==='icebox')dot(e.x,e.y,'#d8b34a',2.5);
+      else if(e.type==='ruinchest'&&e.state==='ok')dot(e.x,e.y,'#dcd6c8',2.5) }
     dot(player.x,player.y,'#fff',3.2) }
   if(started&&player.sta<99.5){ // barra de aguante
     const bw=170, bx=vw/2-bw/2, by=vh-92;
