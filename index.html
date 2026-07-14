@@ -374,7 +374,7 @@ let darkTimer=0,warned=false,grueCd=1,flashRed=0,whisperT=6,lastU=0;
 let shake=0,rainOn=false,rainT=20,freezeMsgT=0,saveT=8,killer='el bosque';
 let flashCold=0,tempPulseT=0,wasFreeze=false,wasHot=false,breathT=0;
 let storm=null,stormT=40,bolts=[],lightFlash=0,thunderCd=0;
-let pAcc=0,stepAcc=0,mouseX=0,mouseY=0;
+let pAcc=0,stepAcc=0,mouseX=0,mouseY=0,freshUiT=2;
 let inCave=false,caveMade=false,otherWorld=null,caveStore=null,caveReturn=null;
 let projs=[],fadeIn=0,openPot=null,birdT=3;
 let stats={kills:0,crafted:0,cooked:0};
@@ -432,7 +432,7 @@ const ITEMS={
   feather:{name:'pluma',tip:'la sueltan los pájaros'},
   egg:{name:'huevo',food:{h:6,hp:0,s:0},tip:'mejor en la olla'},
   honey:{name:'miel',food:{h:10,hp:1,s:1},tip:'clic dcho: comer'},
-  mushroom:{name:'seta de cueva',food:{h:9,hp:0,s:-4},tip:'comestible... más o menos'},
+  mushroom:{name:'seta de cueva',food:{h:8,hp:0,s:-4},tip:'comestible... más o menos'},
   pumpkin:{name:'calabaza',food:{h:22,hp:2,s:0},tip:'del huerto'},
   pumpkin_c:{name:'calabaza asada',food:{h:30,hp:3,s:2},tip:'clic dcho: comer'},
   corn:{name:'maíz',food:{h:16,hp:0,s:0},tip:'del huerto'},
@@ -441,6 +441,7 @@ const ITEMS={
   strawhat:{name:'sombrero de paja',passive:true,tip:'fresquito: alivia el calor del verano'},
   wateringcan:{name:'regadera',passive:true,water:6,tip:'clic dcho: riega el huerto · se rellena en un lago'},
   dung:{name:'estiércol',tip:'clic dcho junto al huerto: abono (lo dejan los bisontes)'},
+  rot:{name:'podrido',tip:'la comida caducó... aún sirve de abono (clic dcho)'},
   horn:{name:'cuerno del Astado',tip:'trofeo del terror del invierno'},
   crown:{name:'corona de seda',tip:'trofeo de la Reina de la cueva'},
   armor_wood:{name:'armadura de madera',passive:true,armor:0.6,adur:80,tip:'absorbe 60% del daño en el inventario'},
@@ -459,9 +460,9 @@ const ITEMS={
   pinecone:{name:'piña',tip:'clic dcho: plantar un árbol'},
   seeds:{name:'semillas',tip:'clic dcho: plantar zanahoria'},
   venda:{name:'venda',tip:'clic dcho: cura 20 de vida'},
-  berries:{name:'bayas',food:{h:10,hp:0,s:0},tip:'clic dcho: comer'},
+  berries:{name:'bayas',food:{h:8,hp:0,s:0},tip:'clic dcho: comer'},
   berries_c:{name:'bayas asadas',food:{h:13,hp:1,s:2},tip:'clic dcho: comer'},
-  carrot:{name:'zanahoria',food:{h:12,hp:0,s:0},tip:'clic dcho: comer'},
+  carrot:{name:'zanahoria',food:{h:10,hp:0,s:0},tip:'clic dcho: comer'},
   carrot_c:{name:'zanahoria asada',food:{h:16,hp:1,s:2},tip:'clic dcho: comer'},
   meat:{name:'carne cruda',food:{h:12,hp:0,s:-8},tip:'clic dcho: comer (mejor asada)'},
   meat_c:{name:'carne asada',food:{h:25,hp:3,s:4},tip:'clic dcho: comer'},
@@ -502,6 +503,7 @@ const RECIPES=[
   {out:'armor_wood',name:'Armadura de madera',cost:{wood:6,rope:2},sci:true},
   {out:'armor_gold',name:'Armadura de oro',cost:{gold:4,stone:4,rope:2},sci:true},
   {out:'chest',name:'Cofre',cost:{boards:2,rope:1},place:'chest',sci:true},
+  {out:'icebox',name:'Nevera',cost:{gold:2,boards:3,silk:2},place:'icebox',sci:true},
   {out:'beebox',name:'Apiario',cost:{boards:2,silk:2},place:'beebox',sci:true},
   {out:'pot',name:'Olla de cocina',cost:{stone:6,gold:2,rope:1},place:'pot',sci:true},
   {out:'firepit',name:'Hoguera de piedra',cost:{stone:8,wood:2},place:'pit',sci:true},
@@ -604,8 +606,8 @@ function genWorld(){
     let ok=true;
     for(const e of ents){ if(Math.abs(e.x-x)<minD&&Math.abs(e.y-y)<minD&&Math.hypot(e.x-x,e.y-y)<minD){ok=false;break} }
     if(ok){ ents.push(makeEnt(type,x,y)); break } } } };
-  add('tree',300,52); add('rock',95,64); add('bush',70,76); add('grass',150,44);
-  add('sapling',110,48); add('flint',60,58); add('carrot',50,62); add('hive',12,140);
+  add('tree',300,52); add('rock',95,64); add('bush',45,76); add('grass',150,44);
+  add('sapling',110,48); add('flint',60,58); add('carrot',30,62); add('hive',9,140);
   add('den',8,60); ents.forEach(e=>{ if(e.type==='den')e.hp=4 });
   // bocas de cueva en el roquedal
   let caves=0;
@@ -693,11 +695,29 @@ function addItem(id,n){ n=n||1;
       it.armor?{id,n:1,passive:true,adur:it.adur,amax:it.adur}:
       it.water?{id,n:1,passive:true,adur:it.water,amax:it.water}:{id,n:1,passive:true}); return }
   let left=n;
-  for(const s of slots){ if(s&&s.id===id&&!s.tool&&!s.passive){ const a=Math.min(20-s.n,left); s.n+=a; left-=a; if(!left)break } }
+  for(const s of slots){ if(s&&s.id===id&&!s.tool&&!s.passive){ const a=Math.min(20-s.n,left); s.n+=a; left-=a;
+    if(PERISH[id])s.fresh=Math.min(s.fresh??PERISH[id],PERISH[id]);
+    if(!left)break } }
   while(left>0){ const i=slots.findIndex(s=>!s);
     if(i<0){ dropAt(player.x,player.y,id,left); msg('Inventario lleno'); break }
-    const a=Math.min(20,left); slots[i]={id,n:a}; left-=a }
+    const a=Math.min(20,left); slots[i]={id,n:a};
+    if(PERISH[id])slots[i].fresh=PERISH[id];
+    left-=a }
   renderInv();
+}
+function tickFresh(dt){
+  const rotSlot=(arr,i,rate)=>{ const s=arr[i];
+    if(!s||s.tool||s.passive||!PERISH[s.id])return;
+    if(s.fresh===undefined)s.fresh=PERISH[s.id];
+    s.fresh-=dt*rate;
+    if(s.fresh<=0){ arr[i]={id:'rot',n:s.n};
+      if(arr===slots)msg('Se te ha podrido: '+ITEMS[s.id].name) } };
+  for(let i=0;i<slots.length;i++)rotSlot(slots,i,1);
+  if(held&&PERISH[held.id]){ held.fresh=(held.fresh??PERISH[held.id])-dt;
+    if(held.fresh<=0){ held={id:'rot',n:held.n}; renderHeld() } }
+  for(const e of ents){ if((e.type==='chest'||e.type==='icebox')&&e.slots){
+    const rate=e.type==='icebox'?0.25:1;
+    for(let i=0;i<e.slots.length;i++)rotSlot(e.slots,i,rate) } }
 }
 function lootFly(x,y,item,n,data){ flights.push({x,y,sx:x,sy:y,item,n,data:data||null,t:0,dur:0.45}) }
 
@@ -734,10 +754,10 @@ function useItem(arr,i){
     if(s.adur<=0)return msg('La regadera está vacía: rellénala en un lago');
     s.adur--; fm.crop.t=Math.min(fm.crop.max,fm.crop.t+25);
     burstP(fm.x,fm.y-12,9,'rgba(140,180,220,0.8)',55); sfx('pick'); renderInv(); return }
-  if(s.id==='dung'){
+  if(s.id==='dung'||s.id==='rot'){
     const fm=ents.find(e=>e.type==='farm'&&e.crop&&e.crop.t<e.crop.max&&dist(e,player)<75);
     if(!fm)return msg('Abona junto a un huerto plantado');
-    fm.crop.t=Math.min(fm.crop.max,fm.crop.t+40);
+    fm.crop.t=Math.min(fm.crop.max,fm.crop.t+(s.id==='dung'?40:25));
     burstP(fm.x,fm.y-10,6,'#8a6a3e',40); sfx('pick');
     s.n--; if(!s.n)arr[i]=null; renderInv(); return }
   if(s.passive)return msg(ITEMS[s.id].name+': funciona con llevarlo en el inventario');
@@ -792,9 +812,14 @@ function renderCell(el,s,eq){
   el.d.classList.toggle('eq',!!eq);
   if(!s)return;
   drawItemIcon(g,s.id,22,23,1.15);
-  if(s.tool){ el.dur.style.display='block'; el.bar.style.width=clamp(s.dur/s.max*100,0,100)+'%' }
-  else if(s.amax){ el.dur.style.display='block'; el.bar.style.width=clamp(s.adur/s.amax*100,0,100)+'%' }
-  else if(!s.passive)el.n.textContent=s.n }
+  if(s.tool){ el.dur.style.display='block'; el.bar.style.width=clamp(s.dur/s.max*100,0,100)+'%';
+    el.bar.style.background='#7dbb52' }
+  else if(s.amax){ el.dur.style.display='block'; el.bar.style.width=clamp(s.adur/s.amax*100,0,100)+'%';
+    el.bar.style.background='#7dbb52' }
+  else if(!s.passive){ el.n.textContent=s.n;
+    if(PERISH[s.id]){ const r=clamp((s.fresh??PERISH[s.id])/PERISH[s.id],0,1);
+      el.dur.style.display='block'; el.bar.style.width=(r*100)+'%';
+      el.bar.style.background=r>0.5?'#7dbb52':r>0.25?'#d8b34a':'#c34532' } } }
 function renderInv(){
   for(let i=0;i<slots.length;i++)renderCell(slotEls[i],slots[i],slots[i]&&slots[i]===equippedRef);
   renderCraft();
@@ -802,6 +827,7 @@ function renderInv(){
 // cofre
 const chestGrid=$('chestGrid'); let chestEls=[];
 function openChestUI(e){ openChest=e; chestGrid.innerHTML=''; chestEls=[];
+  $('chestP').querySelector('h3').textContent=e.type==='icebox'?'Nevera':'Cofre';
   for(let i=0;i<9;i++)chestEls.push(makeSlotEl(e.slots,i,chestGrid));
   renderChest(); $('chestP').style.display='block' }
 function closeChest(){ openChest=null; $('chestP').style.display='none' }
@@ -909,6 +935,8 @@ function craft(r){ if(dead||paused)return;
     scienceBuilt=true; msg('Máquina de Ciencia construida: nuevas recetas desbloqueadas'); }
   else if(r.place==='chest'){ ents.push({type:'chest',x:pp.x,y:pp.y,slots:Array(9).fill(null),seed:Math.random()*100,state:'ok',regrow:0,shake:0});
     msg('Cofre colocado: clic para abrirlo') }
+  else if(r.place==='icebox'){ ents.push({type:'icebox',x:pp.x,y:pp.y,slots:Array(9).fill(null),seed:Math.random()*100,state:'ok',regrow:0,shake:0});
+    msg('Nevera lista: la comida dentro aguanta 4× más') }
   else if(r.place==='trap'){ ents.push({type:'trap',x:pp.x,y:pp.y,uses:3,seed:Math.random()*100,state:'ok',regrow:0,shake:0});
     msg('Trampa armada: los conejos caen solos') }
   else if(r.place==='farm'){ ents.push({type:'farm',x:pp.x,y:pp.y,crop:null,seed:Math.random()*100,state:'ok',regrow:0,shake:0});
@@ -975,6 +1003,10 @@ function burstP(x,y,n,color,speed,star){
 // ---------- sistema de acciones ----------
 function startAct(kind,target,dur){ player.act={kind,target,t:0,dur} }
 const RAW_COOK={berries:1,meat:1,carrot:1,pumpkin:1,corn:1,fish:1};
+// frescura en segundos (lo que no está aquí no se pudre)
+const PERISH={berries:200,carrot:320,meat:150,fish:120,corn:320,pumpkin:380,egg:260,mushroom:220,
+  berries_c:280,carrot_c:340,meat_c:260,fish_c:260,corn_c:340,pumpkin_c:380,
+  estofado:320,albondigas:320,pastel:300,sopa:300,revuelto:300,sopasetas:300,ensalada:260,potaje:200,asado:340,tarta:320};
 function startCook(f,src,id){ player.face=f.x>player.x?1:-1;
   player.act={kind:'cook',target:f,t:0,dur:1.1,src,itemId:id} }
 function actLoot(e){
@@ -982,9 +1014,9 @@ function actLoot(e){
     case 'grass': e.state='picked'; e.regrow=150; lootFly(e.x,e.y-14,'grass',1);
       if(Math.random()<0.18)lootFly(e.x,e.y-6,'seeds',1); break;
     case 'sapling': e.state='picked'; e.regrow=160; lootFly(e.x,e.y-20,'twig',1); break;
-    case 'bush': e.state='picked'; e.regrow=240; lootFly(e.x,e.y-18,'berries',2);
+    case 'bush': e.state='picked'; e.regrow=320; lootFly(e.x,e.y-18,'berries',2);
       burstP(e.x,e.y-16,5,'#c0452c',50); break;
-    case 'carrot': e.state='picked'; e.regrow=300; lootFly(e.x,e.y-8,'carrot',1); break;
+    case 'carrot': e.state='picked'; e.regrow=420; lootFly(e.x,e.y-8,'carrot',1); break;
     case 'flint': e.state='gone'; lootFly(e.x,e.y-6,'flint',1); break;
     case 'mushroom': e.state='gone'; lootFly(e.x,e.y-8,'mushroom',1); break;
     case 'hive': e.state='picked'; e.regrow=140;
@@ -1008,7 +1040,7 @@ function tickAct(dt){
       t:0.6,max:0.6,r:1.8,color:'rgba(240,248,255,0.6)'});
     if(a.t<a.dur)return;
     useTool();
-    if(Math.random()<0.75){ burstP(a.spot.x,a.spot.y,8,'rgba(190,220,240,0.9)',70);
+    if(Math.random()<0.65){ burstP(a.spot.x,a.spot.y,8,'rgba(190,220,240,0.9)',70);
       lootFly(a.spot.x,a.spot.y-8,'fish',1); sfx('pop'); ach('pescador') }
     else { float(a.spot.x,a.spot.y-14,'se escapó...','#aac8dc') }
     player.act=null; return }
@@ -1074,7 +1106,7 @@ function useEnt(e){
     case 'flint': if(e.state!=='ok')return; startAct('pick',e,0.35); break;
     case 'drop': if(e.state!=='ok')return; startAct('pick',e,0.3); break;
     case 'science': msg('Tu Máquina de Ciencia. Cerca de ella se te ocurren cosas.'); break;
-    case 'chest': openChestUI(e); break;
+    case 'chest': case 'icebox': openChestUI(e); break;
     case 'trap':
       if(e.state==='full'){ lootFly(e.x,e.y-8,'meat',1); e.uses--;
         if(e.uses<=0){ e.state='gone'; msg('La trampa se ha roto') } else e.state='ok'; sfx('pick') }
@@ -1307,7 +1339,8 @@ cv.addEventListener('pointermove',e=>{
     bundle:['Tus cosas','clic para recuperarlas'],
     pup:['Cachorro perdido','clic para adoptarlo'],
     wall:['Muro de piedra','frena a los bichos; golpéalo para retirarlo'],
-    lamp:['Farol de poste','luz eterna; no calienta']};
+    lamp:['Farol de poste','luz eterna; no calienta'],
+    icebox:['Nevera','la comida dentro dura 4× más']};
   let tt=TIPS[en.type]||[en.type,''];
   if(en.type==='drop')tt=[ITEMS[en.item].name+(en.n>1?' ×'+en.n:''),'clic para coger'];
   if(en.state==='growing')tt=['Brote','está creciendo'];
@@ -1455,7 +1488,7 @@ function tick(dt){
     return true });
 
   const lit=isLit();
-  player.hun=Math.max(0,player.hun-0.28*D().hunger*dt);
+  player.hun=Math.max(0,player.hun-0.34*D().hunger*dt);
   if(player.hun<=0){ player.hp-=2*dt; killer='el hambre' }
   let ds;
   if(inCave)ds=lit?-0.25:-1.2;
@@ -1536,7 +1569,7 @@ function tick(dt){
     if(!inCave){
       mobs.forEach(m=>{ if(m.type==='spider'||m.type==='wolf')m.flee=true });
       let rb=mobs.filter(m=>m.type==='rabbit').length;
-      while(rb<14){ const a=Math.random()*6.28;
+      while(rb<9){ const a=Math.random()*6.28;
         spawnMob('rabbit',player.x+Math.cos(a)*(500+Math.random()*600),player.y+Math.sin(a)*(500+Math.random()*600)); rb++ } } }
   lastU=u;
   // pájaros de día
@@ -1728,6 +1761,11 @@ function tick(dt){
   floats=floats.filter(f=>(f.t-=dt)>0); floats.forEach(f=>f.y-=26*dt);
   flashRed=Math.max(0,flashRed-dt*1.4); flashCold=Math.max(0,flashCold-dt*1.2); shake=Math.max(0,shake-dt);
   saveT-=dt; if(saveT<=0){ saveT=8; save() }
+  tickFresh(dt);
+  freshUiT=(freshUiT||0)-dt;
+  if(freshUiT<=0){ freshUiT=2;
+    if(slots.some(s=>s&&PERISH[s.id]))renderInv();
+    if(openChest)renderChest() }
   banner.t=Math.max(0,banner.t-dt);
   hud();
   if(player.hp<=0&&!dead){
@@ -1989,6 +2027,19 @@ function drawItemIcon(g,id,cx,cy,s){
       g.beginPath(); g.moveTo(-11,-4); g.lineTo(-13,0); g.moveTo(-12,-5); g.lineTo(-15,-2); g.stroke();
       g.strokeStyle=INK; g.lineWidth=2;
       g.beginPath(); g.arc(2,-6,4,Math.PI,0); g.stroke(); break;
+    case 'rot': g.fillStyle='#5e6a46';
+      g.beginPath(); g.arc(-3,2,5,0,7); g.fill();
+      g.beginPath(); g.arc(3,0,4.5,0,7); g.fill();
+      g.strokeStyle=INK; g.beginPath(); g.arc(0,1,7.5,0,7); g.stroke();
+      g.fillStyle='#8a9a6a';
+      g.beginPath(); g.arc(-2,-1,1.4,0,7); g.fill();
+      g.beginPath(); g.arc(3,3,1.2,0,7); g.fill();
+      g.strokeStyle='#9aa87a'; g.lineWidth=1.4;
+      g.beginPath(); g.moveTo(2,-6); g.quadraticCurveTo(4,-9,3,-11); g.stroke(); break;
+    case 'icebox': g.fillStyle='#aec6ce'; rr2(g,-8,-8,16,16,3); g.fill(); g.stroke();
+      g.strokeStyle='#7a9aa8'; g.lineWidth=1.8;
+      g.beginPath(); g.moveTo(-8,-2); g.lineTo(8,-2); g.stroke();
+      g.fillStyle='#e8f2f6'; g.beginPath(); g.arc(0,3,2,0,7); g.fill(); break;
     case 'dung': g.fillStyle='#6e5636';
       g.beginPath(); g.arc(-3,3,4.5,0,7); g.fill();
       g.beginPath(); g.arc(3,2,4,0,7); g.fill();
@@ -2126,6 +2177,17 @@ function drawChest(e){
   ctx.fillStyle='#8a6236'; rr2(ctx,e.x-17,e.y-24,34,26,4); ctx.fill(); ctx.stroke();
   ctx.fillStyle='#9a7040'; rr2(ctx,e.x-17,e.y-24,34,10,4); ctx.fill(); ctx.stroke();
   ctx.fillStyle='#d8b34a'; ctx.beginPath(); ctx.arc(e.x,e.y-11,3,0,7); ctx.fill(); ctx.stroke() }
+function drawIcebox(e){
+  shadowE(e.x,e.y+2,20);
+  ctx.strokeStyle=INK; ctx.lineWidth=3;
+  ctx.fillStyle='#aec6ce'; rr2(ctx,e.x-16,e.y-28,32,30,4); ctx.fill(); ctx.stroke();
+  ctx.strokeStyle='#7a9aa8'; ctx.lineWidth=2;
+  ctx.beginPath(); ctx.moveTo(e.x-16,e.y-14); ctx.lineTo(e.x+16,e.y-14); ctx.stroke();
+  ctx.fillStyle='#e8f2f6'; ctx.beginPath(); ctx.arc(e.x,e.y-8,2.6,0,7); ctx.fill();
+  const pu=0.5+0.5*Math.sin(time*2+e.seed);
+  ctx.fillStyle='rgba(200,235,245,'+(0.25*pu)+')';
+  ctx.beginPath(); ctx.moveTo(e.x-10,e.y-24); ctx.lineTo(e.x-4,e.y-24); ctx.lineTo(e.x-8,e.y-18);
+  ctx.closePath(); ctx.fill() }
 function drawTrap(e){
   ctx.strokeStyle='#7a5230'; ctx.lineWidth=3; ctx.lineCap='round';
   ctx.beginPath(); ctx.arc(e.x,e.y-2,10,Math.PI,0); ctx.stroke();
@@ -2750,6 +2812,7 @@ function draw(){
     else if(e.type==='bush')drawBush(e,pal); else if(e.type==='flint')drawFlint(e);
     else if(e.type==='carrot')drawCarrot(e); else if(e.type==='drop')drawDrop(e);
     else if(e.type==='science')drawScience(e); else if(e.type==='chest')drawChest(e);
+    else if(e.type==='icebox')drawIcebox(e);
     else if(e.type==='trap')drawTrap(e); else if(e.type==='goldnode')drawGoldnode(e);
     else if(e.type==='mushroom')drawMushroomEnt(e); else if(e.type==='hive')drawHive(e);
     else if(e.type==='cave_in')drawCaveIn(e); else if(e.type==='cave_out')drawCaveOut(e);
@@ -2971,6 +3034,8 @@ window.HAM={
   diff:()=>difficulty,
   setTemp:t=>{ temp=t },
   achs:()=>Object.keys(achUn),
+  age:s=>tickFresh(s),
+  freshOf:id=>{ const sl=slots.find(x=>x&&x.id===id); return sl?Math.round(sl.fresh??-1):null },
   dropTest:(id,n,dx)=>dropAt(player.x+(dx||100),player.y,id,n||1),
   adopt:()=>{ const e=ents.find(e=>e.type==='pup'&&e.state==='ok'); if(e)useEnt(e); return !!e },
   setStorm:k=>{ storm=k?{kind:k,t:20}:null; stormT=40; if(k==='thunder')thunderCd=0.5 },
