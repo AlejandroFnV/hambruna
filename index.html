@@ -94,8 +94,15 @@
   .rbtn.lock{opacity:.3}
   .rbtn canvas{position:absolute;left:7px;top:7px}
 
-  #help{position:fixed;right:16px;bottom:12px;color:rgba(236,223,189,.75);font-size:12px;
-    z-index:5;pointer-events:none;text-shadow:0 1px 2px #000;text-align:right;line-height:1.5}
+  #help{position:fixed;right:16px;bottom:56px;color:#ecdfbd;font-size:12.5px;
+    z-index:6;pointer-events:none;text-shadow:0 1px 2px #000;text-align:right;line-height:1.6;
+    display:none;background:rgba(28,24,17,.94);border:2.5px solid #0c0a07;border-radius:12px;
+    padding:10px 14px}
+  #help.open{display:block}
+  #helpBtn{position:fixed;right:16px;bottom:14px;z-index:6;font-family:inherit;font-size:16px;
+    width:38px;height:38px;color:#ecdfbd;background:#3a3226;border:2.5px solid #0c0a07;
+    border-radius:50%;cursor:pointer;box-shadow:0 3px 5px rgba(0,0,0,.5)}
+  #helpBtn:hover{background:#4a4030}
 
   #overlay{position:fixed;inset:0;background:rgba(8,6,4,.9);z-index:10;display:flex;
     align-items:center;justify-content:center;flex-direction:column;color:#ecdfbd;text-align:center;padding:20px}
@@ -155,6 +162,7 @@
 <button id="craftBtn">Crear (C)</button>
 <div id="craft"></div>
 <div id="help">WASD moverte · clic mundo: recolectar / golpear · Espacio usar lo cercano · Tab mapa<br>Inventario — clic izq: coger y mover · clic dcho o teclas 1-9: comer / equipar / plantar<br>Comida cogida + clic en fogata = cocinar · C crear · F cocinar rápido · +/- zoom · M silencio · P pausa</div>
+<button id="helpBtn" title="Controles (H)">?</button>
 
 <div id="overlay">
   <h1>HAMBRUNA</h1>
@@ -837,6 +845,7 @@ function renderCraft(){ RECIPES.forEach(r=>{
   for(const e of Object.entries(r.cost))n=Math.min(n,Math.floor(count(e[0])/e[1]));
   r.mkEl.textContent=(n>0&&isFinite(n)&&!(r.sci&&!scienceBuilt))?'×'+n:'' }) }
 $('craftBtn').onclick=()=>craftEl.classList.toggle('open');
+$('helpBtn').onclick=()=>$('help').classList.toggle('open');
 
 // ---------- mensajes / floats / partículas ----------
 const msgsEl=$('msgs');
@@ -1043,6 +1052,7 @@ addEventListener('keydown',e=>{ const k=e.key.toLowerCase(); keys[k]=true;
   if(k==='escape'){ closeChest(); craftEl.classList.remove('open') }
   if(k==='c')craftEl.classList.toggle('open');
   if(k==='f')cook();
+  if(k==='h')$('help').classList.toggle('open');
   if(k==='m'){ muted=!muted; msg(muted?'Sonido apagado':'Sonido encendido') }
   if(k==='p'&&started&&!dead){ paused=!paused; msg(paused?'Pausa':'Seguimos') }
   if(k>='1'&&k<='9'&&started&&!dead&&!paused){ const i=+k-1;
