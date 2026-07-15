@@ -381,7 +381,8 @@ let pAcc=0,stepAcc=0,mouseX=0,mouseY=0,freshUiT=2;
 let inCave=false,caveMade=false,otherWorld=null,caveStore=null,caveReturn=null;
 let projs=[],fadeIn=0,openPot=null,birdT=3;
 let stats={kills:0,crafted:0,cooked:0};
-let tideOn=false,devourerDone=false;
+let tideOn=false,devourerDone=false,altarBuilt=false;
+const activeAmulet=()=>{ const s=slots.find(s=>s&&s.id&&s.id.slice(0,3)==='am_'); return s?s.id:null };
 let banner={t:0,text:''};
 // logros
 const ACHS=[
@@ -451,6 +452,9 @@ const ITEMS={
   horn:{name:'cuerno del Astado',tip:'trofeo del terror del invierno'},
   crown:{name:'corona de seda',tip:'trofeo de la Reina de la cueva'},
   darkheart:{name:'corazón umbrío',tip:'clic dcho: bendición — regeneras vida para siempre'},
+  am_vida:{name:'amuleto de vida',passive:true,tip:'regenera vida hasta 80 (solo el primero del inventario cuenta)'},
+  am_luz:{name:'amuleto de luz',passive:true,tip:'halo propio: la oscuridad no te toca'},
+  am_veloz:{name:'amuleto veloz',passive:true,tip:'+12% de velocidad al andar y correr'},
   armor_wood:{name:'armadura de madera',passive:true,armor:0.6,adur:80,tip:'absorbe 60% del daño en el inventario'},
   armor_gold:{name:'armadura de oro',passive:true,armor:0.75,adur:150,tip:'absorbe 75% del daño en el inventario'},
   estofado:{name:'estofado de carne',food:{h:55,hp:6,s:5},tip:'de la olla'},
@@ -517,6 +521,10 @@ const RECIPES=[
   {out:'firepit',name:'Hoguera de piedra',cost:{stone:8,wood:2},place:'pit',sci:true},
   {out:'lamp',name:'Farol de poste',cost:{wood:3,gold:1,torch:1},place:'lamp',sci:true},
   {out:'totem',name:'Tótem de retorno',cost:{boards:4,gold:2,venda:1},place:'totem',sci:true},
+  {out:'altar',name:'Altar Oscuro',cost:{gold:4,silk:4,stone:2},place:'altar',sci:true},
+  {out:'am_vida',name:'Amuleto de vida',cost:{gold:4,silk:2,honey:1},alt:true},
+  {out:'am_luz',name:'Amuleto de luz',cost:{gold:2,silk:3},alt:true},
+  {out:'am_veloz',name:'Amuleto veloz',cost:{gold:2,feather:2,silk:2},alt:true},
   {out:'portal',name:'Portal Umbrío',cost:{horn:1,crown:1,gold:6,boards:6},place:'portal',sci:true},
 ];
 const WHISPERS=['¿Has oído eso?','Las sombras se acercan...','No estás solo...','Algo susurra tu nombre...'];
@@ -947,14 +955,18 @@ function hideTip(){ $('tip').style.display='none' }
 // ---------- craft ----------
 function canCraft(r){
   if(r.sci&&!scienceBuilt)return false;
+  if(r.alt&&!altarBuilt)return false;
   if(r.out==='science'&&scienceBuilt)return false;
+  if(r.out==='altar'&&altarBuilt)return false;
   if(r.special==='backpack'&&slots.length>=MAXSLOTS)return false;
   return Object.entries(r.cost).every(e=>count(e[0])>=e[1]) }
 function placePos(){ let x=clamp(player.x+player.face*50,60,WS()-60), y=player.y+8;
   if(blockedAt(x,y)){ x=player.x; y=player.y+6 } return {x,y} }
 function craft(r){ if(dead||paused)return;
   if(r.sci&&!scienceBuilt)return msg('Necesitas una Máquina de Ciencia');
+  if(r.alt&&!altarBuilt)return msg('Necesitas un Altar Oscuro');
   if(r.out==='science'&&scienceBuilt)return msg('Ya tienes una Máquina de Ciencia');
+  if(r.out==='altar'&&altarBuilt)return msg('Ya tienes un Altar Oscuro');
   if(r.special==='backpack'&&slots.length>=MAXSLOTS)return msg('No puedes cargar más mochilas');
   if(!canCraft(r)){
     const miss=Object.entries(r.cost).filter(e=>count(e[0])<e[1])
@@ -990,6 +1002,8 @@ function craft(r){ if(dead||paused)return;
   else if(r.place==='wall'){ ents.push({type:'wall',x:pp.x,y:pp.y,hp:6,seed:Math.random()*100,state:'ok',regrow:0,shake:0}) }
   else if(r.place==='lamp'){ ents.push({type:'lamp',x:pp.x,y:pp.y,seed:Math.random()*100,state:'ok',regrow:0,shake:0});
     msg('Farol encendido: luz para siempre (pero no calienta)') }
+  else if(r.place==='altar'){ ents.push({type:'altar',x:pp.x,y:pp.y,seed:Math.random()*100,state:'ok',regrow:0,shake:0});
+    altarBuilt=true; msg('El Altar Oscuro susurra: nuevas reliquias al alcance') }
   else if(r.special==='backpack'){ const target=Math.min(MAXSLOTS,slots.length+4);
     while(slots.length<target)slots.push(null);
     buildInv(); renderInv(); msg('Mochila: +4 huecos de inventario') }
@@ -1008,6 +1022,7 @@ const craftEl=$('craft');
     b.append(c); b.onclick=()=>craft(r);
     b.addEventListener('mouseenter',()=>{
       if(r.sci&&!scienceBuilt)return showTip(r.name,'Requiere Máquina de Ciencia');
+      if(r.alt&&!altarBuilt)return showTip(r.name,'Requiere Altar Oscuro');
       const parts=Object.entries(r.cost).map(e=>{
         const h=count(e[0]); return ITEMS[e[0]].name+' '+Math.min(h,e[1])+'/'+e[1] });
       const miss=Object.entries(r.cost).filter(e=>count(e[0])<e[1])
@@ -1018,7 +1033,7 @@ const craftEl=$('craft');
     (r.sci?gSci:gBase).append(b); r.el=b }); }
 function renderCraft(){ RECIPES.forEach(r=>{
   r.el.classList.toggle('no',!canCraft(r));
-  r.el.classList.toggle('lock',!!r.sci&&!scienceBuilt);
+  r.el.classList.toggle('lock',(!!r.sci&&!scienceBuilt)||(!!r.alt&&!altarBuilt));
   let n=Infinity;
   for(const e of Object.entries(r.cost))n=Math.min(n,Math.floor(count(e[0])/e[1]));
   r.mkEl.textContent=(n>0&&isFinite(n)&&!(r.sci&&!scienceBuilt))?'×'+n:'' }) }
@@ -1402,7 +1417,8 @@ cv.addEventListener('pointermove',e=>{
     lamp:['Farol de poste','luz eterna; no calienta'],
     icebox:['Nevera','la comida dentro dura 4× más'],
     ruinchest:['Cofre reliquia','algo brilla dentro... clic para saquearlo'],
-    pillar:['Columna rota','ruinas de otro tiempo']};
+    pillar:['Columna rota','ruinas de otro tiempo'],
+    altar:['Altar Oscuro','desbloquea los amuletos']};
   let tt=TIPS[en.type]||[en.type,''];
   if(en.type==='drop')tt=[ITEMS[en.item].name+(en.n>1?' ×'+en.n:''),'clic para coger'];
   if(en.state==='growing')tt=['Brote','está creciendo'];
@@ -1429,6 +1445,7 @@ function darkAlpha(u){
   return 0.88 }
 function isLit(){
   if(equippedRef&&equippedRef.id==='torch')return true;
+  if(activeAmulet()==='am_luz')return true;
   if(ents.some(e=>e.type==='lamp'&&e.state==='ok'&&dist(e,player)<80))return true;
   return fires.some(f=>f.fuel>0&&dist(f,player)<lightR(f)*0.8) }
 function ambientTemp(sIdx,u){
@@ -1471,7 +1488,7 @@ function spawnNightMobs(){
 function store(){ try{ const s=window.localStorage; s.getItem('x'); return s }catch(e){ return null } }
 function save(){ const s=store(); if(!s||dead)return;
   try{ s.setItem('hambruna',JSON.stringify({v:6,day,time,temp,scienceBuilt,bossDone,prevSeason,worldSeed,
-    inCave,caveMade,caveReturn,stats,difficulty,ach:achUn,tideOn,devourerDone,
+    inCave,caveMade,caveReturn,stats,difficulty,ach:achUn,tideOn,devourerDone,altarBuilt,
     player,slots,held,equipped:slots.indexOf(equippedRef),
     active:packWorld(), other:inCave?otherWorld:caveStore})) }catch(e){} }
 function loadSave(){ const s=store(); if(!s)return null;
@@ -1482,7 +1499,7 @@ function applySave(d){
   prevSeason=d.prevSeason; worldSeed=d.worldSeed;
   inCave=d.inCave; caveMade=d.caveMade; caveReturn=d.caveReturn; stats=d.stats||{kills:0,crafted:0,cooked:0};
   difficulty=d.difficulty||'normal'; achUn=d.ach||{};
-  tideOn=!!d.tideOn; devourerDone=!!d.devourerDone;
+  tideOn=!!d.tideOn; devourerDone=!!d.devourerDone; altarBuilt=!!d.altarBuilt;
   Object.assign(player,d.player); player.act=null; slots=d.slots; held=d.held||null;
   equippedRef=d.equipped>=0?slots[d.equipped]:null;
   loadWorld(d.active);
@@ -1510,7 +1527,8 @@ function tick(dt){
   if(player.sta<=0)player.winded=true;
   if(player.winded&&player.sta>25)player.winded=false;
   const mud=!inCave&&biomeAt(player.x,player.y)===B_SWAMP;
-  const spd=(canSprint?225:150)*(mud?0.65:1);
+  const amu=activeAmulet();
+  const spd=(canSprint?225:150)*(mud?0.65:1)*(amu==='am_veloz'?1.12:1);
   player.iframes=Math.max(0,player.iframes-dt);
   const acc=Math.min(1,dt*12);
   player.vx=lerp(player.vx,mx*spd,acc); player.vy=lerp(player.vy,my*spd,acc);
@@ -1555,6 +1573,7 @@ function tick(dt){
 
   const lit=isLit();
   if(player.blessed&&player.hp<100)player.hp=Math.min(100,player.hp+0.3*dt);
+  if(amu==='am_vida'&&player.hp<80)player.hp=Math.min(80,player.hp+0.5*dt);
   player.hun=Math.max(0,player.hun-0.34*D().hunger*dt);
   if(player.hun<=0){ player.hp-=2*dt; killer='el hambre' }
   let ds;
@@ -2068,6 +2087,16 @@ function drawItemIcon(g,id,cx,cy,s){
       g.strokeStyle='#4f7a2c'; g.lineWidth=2.2;
       g.beginPath(); g.moveTo(-3,6); g.quadraticCurveTo(-8,2,-7,-4); g.stroke();
       if(id==='corn_c')steam(g); break;
+    case 'altar': g.fillStyle='#3a3440';
+      poly(g,[[-8,9],[-5,-4],[5,-4],[8,9]]); g.fill(); g.stroke();
+      g.fillStyle='#8a5aa8'; poly(g,[[0,-11],[4,-6],[0,-1],[-4,-6]]); g.fill(); g.stroke(); break;
+    case 'am_vida': case 'am_luz': case 'am_veloz': {
+      const gc={am_vida:'#c34532',am_luz:'#e8c94a',am_veloz:'#7fa8c9'}[id];
+      g.strokeStyle='#d8c9a0'; g.lineWidth=2;
+      g.beginPath(); g.arc(0,-4,6,Math.PI*0.15,Math.PI*0.85,true); g.stroke();
+      g.fillStyle=gc; g.strokeStyle=INK; g.lineWidth=2;
+      g.beginPath(); g.arc(0,4,5,0,7); g.fill(); g.stroke();
+      g.fillStyle='rgba(255,255,255,.5)'; g.beginPath(); g.arc(-1.6,2.4,1.4,0,7); g.fill(); break }
     case 'darkheart': g.fillStyle='#4a3060';
       g.beginPath(); g.moveTo(0,9);
       g.bezierCurveTo(-10,1,-8,-8,-1,-5); g.bezierCurveTo(0,-7,1,-7,2,-5);
@@ -2634,6 +2663,21 @@ function drawBison(m){
   ctx.beginPath(); ctx.arc(18,-18,1.6,0,7); ctx.fill();
   ctx.fillStyle='#3a2c1c'; ctx.beginPath(); ctx.ellipse(21,-12,3.6,2.6,0.2,0,7); ctx.fill(); ctx.stroke();
   ctx.restore() }
+function drawAltar(e){
+  shadowE(e.x,e.y+2,24);
+  ctx.strokeStyle=INK; ctx.lineWidth=3;
+  ctx.fillStyle='#3a3440';
+  ctx.beginPath(); ctx.moveTo(e.x-20,e.y); ctx.lineTo(e.x-14,e.y-30);
+  ctx.lineTo(e.x+14,e.y-30); ctx.lineTo(e.x+20,e.y); ctx.closePath(); ctx.fill(); ctx.stroke();
+  ctx.fillStyle='#4a4450'; rr2(ctx,e.x-18,e.y-38,36,10,3); ctx.fill(); ctx.stroke();
+  const pu=0.5+0.5*Math.sin(time*2.6+e.seed);
+  ctx.fillStyle='rgba(138,90,168,'+(0.18*pu)+')';
+  ctx.beginPath(); ctx.arc(e.x,e.y-44,18,0,7); ctx.fill();
+  ctx.fillStyle='#8a5aa8'; ctx.strokeStyle=INK; ctx.lineWidth=2;
+  poly(ctx,[[e.x,e.y-52],[e.x+6,e.y-44],[e.x,e.y-36],[e.x-6,e.y-44]]); ctx.fill(); ctx.stroke();
+  ctx.strokeStyle='#8a5aa8'; ctx.lineWidth=1.6;
+  for(let i=0;i<3;i++){ const a=time*2+i*2.1;
+    ctx.beginPath(); ctx.arc(e.x,e.y-44,10+i*4,a,a+1.4); ctx.stroke() } }
 function drawDevourer(m){
   shadowE(m.x,m.y+2,34);
   ctx.save(); ctx.globalAlpha=0.92;
@@ -2829,6 +2873,12 @@ function drawPlayer(){
     ctx.beginPath(); ctx.moveTo(0,0); ctx.lineTo(-9,7); ctx.stroke(); ctx.restore() }
   ctx.fillStyle='#a33d2b'; rr2(ctx,-8,-40,16,8,3); ctx.fill();
   ctx.strokeStyle=INK; ctx.lineWidth=2.5; ctx.stroke();
+  const amu2=activeAmulet();
+  if(amu2){ const ac={am_vida:'#c34532',am_luz:'#e8c94a',am_veloz:'#7fa8c9'}[amu2];
+    ctx.strokeStyle='#d8c9a0'; ctx.lineWidth=1.4;
+    ctx.beginPath(); ctx.moveTo(-4,-38); ctx.quadraticCurveTo(0,-33,4,-38); ctx.stroke();
+    ctx.fillStyle=ac; ctx.strokeStyle=INK; ctx.lineWidth=1.4;
+    ctx.beginPath(); ctx.arc(0,-31,2.6,0,7); ctx.fill(); ctx.stroke() }
   const hb=Math.sin(p.walkT-0.6)*spdN*1.4;
   ctx.fillStyle='#e6d3b3'; ctx.beginPath(); ctx.ellipse(1,-52+hb*0.4,12,14,0,0,7); ctx.fill();
   ctx.strokeStyle=INK; ctx.lineWidth=3; ctx.stroke();
@@ -2988,7 +3038,8 @@ function draw(){
     else if(e.type==='bundle')drawBundle(e); else if(e.type==='pup')drawPup(e);
     else if(e.type==='wall')drawWall(e); else if(e.type==='lamp')drawLamp(e);
     else if(e.type==='reedent')drawReedEnt(e,pal);
-    else if(e.type==='pillar')drawPillar(e); else if(e.type==='ruinchest')drawRuinchest(e); }
+    else if(e.type==='pillar')drawPillar(e); else if(e.type==='ruinchest')drawRuinchest(e);
+    else if(e.type==='altar')drawAltar(e); }
   for(const f of flights)drawItemIcon(ctx,f.item,f.x,f.y,0.8);
   // dardos en vuelo
   ctx.strokeStyle='#e0d6bc'; ctx.lineWidth=2.6; ctx.lineCap='round';
@@ -3047,6 +3098,7 @@ function draw(){
   for(const e of ents){ if(e.type==='portal')lights.push([e.x,e.y-28,120+Math.sin(time*2.2)*10,'170,120,255',7]);
     else if(e.type==='lamp'&&e.state==='ok')lights.push([e.x,e.y-42,95+Math.sin(time*8+e.seed)*4,'255,200,110',e.seed]) }
   if(equippedRef&&equippedRef.id==='torch')lights.push([player.x,player.y-30,150+Math.sin(time*14)*8,'255,170,80',3]);
+  if(activeAmulet()==='am_luz')lights.push([player.x,player.y-34,75+Math.sin(time*4)*5,'200,190,255',5]);
   if(a>0.01){
     dctx.clearRect(0,0,vw,vh);
     dctx.fillStyle='rgba(8,7,18,'+a+')'; dctx.fillRect(0,0,vw,vh);
